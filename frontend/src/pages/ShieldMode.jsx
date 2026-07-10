@@ -13,6 +13,14 @@ export default function ShieldMode() {
   const [currentTranscript, setCurrentTranscript] = useState('')
   const [listening, setListening] = useState(false)
 
+  // --- Upload / Record state ---
+  const [recording, setRecording] = useState(false)
+  const [recordingTime, setRecordingTime] = useState(0)
+  const [uploadingAudio, setUploadingAudio] = useState(false)
+  const [uploadResult, setUploadResult] = useState(null)
+  const [recordedBlob, setRecordedBlob] = useState(null)
+  const [selectedFile, setSelectedFile] = useState(null)
+
   const canvasRef = useRef(null)
   const animationRef = useRef(null)
   const audioContextRef = useRef(null)
@@ -20,6 +28,13 @@ export default function ShieldMode() {
   const recognitionRef = useRef(null)
   const transcriptBufferRef = useRef('')
   const analysisIntervalRef = useRef(null)
+
+  // --- Upload / Record refs ---
+  const mediaRecorderRef = useRef(null)
+  const recordedChunksRef = useRef([])
+  const recordTimerRef = useRef(null)
+  const fileInputRef = useRef(null)
+  const recordStreamRef = useRef(null)
 
   // Setup audio visualizer
   const setupVisualizer = useCallback(async () => {
@@ -209,6 +224,167 @@ export default function ShieldMode() {
     showToast('Shield Mode deactivated', 'warning')
   }
 
+  // ============================================
+  // Audio Recording (MediaRecorder API)
+  // ============================================
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      recordStreamRef.current = stream
+
+      // Prefer webm (Gemini supports it), fall back to whatever is available
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : 'audio/mp4'
+
+      const recorder = new MediaRecorder(stream, { mimeType })
+      recordedChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordedChunksRef.current.push(e.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType })
+        setRecordedBlob(blob)
+        // Stop all tracks to release mic
+        stream.getTracks().forEach(t => t.stop())
+        recordStreamRef.current = null
+      }
+
+      mediaRecorderRef.current = recorder
+      recorder.start(250) // collect data in 250ms chunks
+      setRecording(true)
+      setRecordingTime(0)
+      setUploadResult(null)
+      setRecordedBlob(null)
+      setSelectedFile(null)
+
+      // Timer for display
+      recordTimerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1)
+      }, 1000)
+
+      showToast('🎙️ Recording started...', 'success')
+    } catch (err) {
+      console.error('Recording error:', err)
+      showToast('Could not access microphone', 'error')
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    setRecording(false)
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+    showToast('Recording saved! Tap "Analyze" to check for threats.', 'success')
+  }
+
+  const discardRecording = () => {
+    setRecordedBlob(null)
+    setUploadResult(null)
+    setRecordingTime(0)
+  }
+
+  // ============================================
+  // File Pick
+  // ============================================
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('audio/')) {
+      showToast('Please select an audio file', 'error')
+      return
+    }
+    setSelectedFile(file)
+    setRecordedBlob(null)
+    setUploadResult(null)
+    showToast(`Selected: ${file.name}`, 'success')
+  }
+
+  // ============================================
+  // Upload & Analyze
+  // ============================================
+
+  const analyzeAudio = async () => {
+    const audioSource = recordedBlob || selectedFile
+    if (!audioSource) {
+      showToast('No audio to analyze — record or pick a file first', 'warning')
+      return
+    }
+
+    setUploadingAudio(true)
+    setUploadResult(null)
+
+    try {
+      // Get location
+      let lat = null, lng = null
+      try {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 })
+        )
+        lat = pos.coords.latitude
+        lng = pos.coords.longitude
+      } catch (e) { /* optional */ }
+
+      const formData = new FormData()
+
+      if (recordedBlob) {
+        // Determine file extension from MIME type
+        const ext = recordedBlob.type.includes('webm') ? 'webm' : recordedBlob.type.includes('mp4') ? 'mp4' : 'wav'
+        formData.append('audio', recordedBlob, `recording.${ext}`)
+      } else {
+        formData.append('audio', selectedFile)
+      }
+
+      if (lat != null) formData.append('latitude', lat)
+      if (lng != null) formData.append('longitude', lng)
+
+      const data = await apiFetch('/api/audio/upload', {
+        method: 'POST',
+        body: formData,
+        // Note: apiFetch already skips Content-Type for FormData
+      })
+
+      setUploadResult(data.analysis)
+
+      if (data.analysis?.threat_level === 'DANGER') {
+        triggerEmergency('audio')
+      }
+
+      showToast(
+        data.analysis?.threat_level === 'SAFE'
+          ? '✅ Audio analyzed — no threats detected'
+          : data.analysis?.threat_level === 'DANGER'
+            ? '🚨 DANGER detected in audio!'
+            : '⚠️ Suspicious content detected',
+        data.analysis?.threat_level === 'SAFE' ? 'success' : 'error'
+      )
+    } catch (err) {
+      console.error('Upload analysis error:', err)
+      showToast(`Analysis failed: ${err.message}`, 'error')
+    } finally {
+      setUploadingAudio(false)
+    }
+  }
+
+  // Format recording time as MM:SS
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0')
+    const s = (seconds % 60).toString().padStart(2, '0')
+    return `${m}:${s}`
+  }
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -220,6 +396,13 @@ export default function ShieldMode() {
         try { recognitionRef.current.stop() } catch(e) {}
       }
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current)
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop() } catch(e) {}
+      }
+      if (recordStreamRef.current) {
+        recordStreamRef.current.getTracks().forEach(t => t.stop())
+      }
     }
   }, [])
 
@@ -328,6 +511,158 @@ export default function ShieldMode() {
         </>
       )}
 
+      {/* ============================================
+          Upload & Record Section — always visible
+          ============================================ */}
+      <div className="upload-section" style={{ marginTop: '28px' }}>
+        <h3 style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          📤 Upload &amp; Analyze Audio
+        </h3>
+        <p className="text-secondary" style={{ fontSize: '0.82rem', marginBottom: '16px' }}>
+          Record a clip or pick an audio file — AI will check for threats.
+        </p>
+
+        {/* Record / Stop buttons */}
+        <div className="upload-actions">
+          {!recording ? (
+            <button
+              className="btn btn-primary"
+              onClick={startRecording}
+              disabled={uploadingAudio}
+              style={{ flex: 1 }}
+            >
+              🎙️ Record Audio
+            </button>
+          ) : (
+            <button
+              className="btn btn-danger"
+              onClick={stopRecording}
+              style={{ flex: 1 }}
+            >
+              ⏹ Stop ({formatTime(recordingTime)})
+            </button>
+          )}
+
+          <button
+            className="btn btn-outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={recording || uploadingAudio}
+            style={{ flex: 1 }}
+          >
+            📁 Pick File
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="audio/*"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
+        </div>
+
+        {/* Recording indicator */}
+        {recording && (
+          <div className="recording-indicator">
+            <span className="rec-dot" />
+            <span>Recording… {formatTime(recordingTime)}</span>
+          </div>
+        )}
+
+        {/* Pending audio preview */}
+        {(recordedBlob || selectedFile) && !recording && (
+          <div className="audio-pending glass-card-static" style={{ marginTop: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>
+                {recordedBlob
+                  ? `🎙️ Recorded clip (${formatTime(recordingTime)})`
+                  : `📁 ${selectedFile.name}`}
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => { discardRecording(); setSelectedFile(null); }}
+                title="Discard"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Playback */}
+            {recordedBlob && (
+              <audio
+                controls
+                src={URL.createObjectURL(recordedBlob)}
+                style={{ width: '100%', marginBottom: '10px', borderRadius: '8px' }}
+              />
+            )}
+            {selectedFile && (
+              <audio
+                controls
+                src={URL.createObjectURL(selectedFile)}
+                style={{ width: '100%', marginBottom: '10px', borderRadius: '8px' }}
+              />
+            )}
+
+            <button
+              className="btn btn-primary btn-full"
+              onClick={analyzeAudio}
+              disabled={uploadingAudio}
+            >
+              {uploadingAudio ? (
+                <>
+                  <span className="spin" style={{ display: 'inline-block' }}>⏳</span>
+                  {' '}Analyzing with AI…
+                </>
+              ) : (
+                '🔍 Analyze for Threats'
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Upload Result */}
+        {uploadResult && (
+          <div
+            className={`upload-result glass-card-static threat-indicator ${uploadResult.threat_level?.toLowerCase()}`}
+            style={{ marginTop: '16px', textAlign: 'left' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 700, fontSize: '1rem' }}>
+                {uploadResult.threat_level === 'SAFE' && '✅ SAFE'}
+                {uploadResult.threat_level === 'SUSPICIOUS' && '⚠️ SUSPICIOUS'}
+                {uploadResult.threat_level === 'DANGER' && '🚨 DANGER'}
+              </span>
+              <span className="text-muted" style={{ fontSize: '0.78rem' }}>
+                Confidence: {Math.round((uploadResult.confidence || 0) * 100)}%
+              </span>
+            </div>
+
+            {uploadResult.transcript && (
+              <div style={{ marginBottom: '8px' }}>
+                <p className="text-muted" style={{ fontSize: '0.72rem', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Transcript
+                </p>
+                <p style={{ fontSize: '0.85rem', fontStyle: 'italic' }}>"{uploadResult.transcript}"</p>
+              </div>
+            )}
+
+            <div style={{ marginBottom: '8px' }}>
+              <p className="text-muted" style={{ fontSize: '0.72rem', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Reason
+              </p>
+              <p style={{ fontSize: '0.85rem' }}>{uploadResult.reason}</p>
+            </div>
+
+            <div>
+              <p className="text-muted" style={{ fontSize: '0.72rem', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Recommended Action
+              </p>
+              <p style={{ fontSize: '0.85rem', fontWeight: 500 }}>{uploadResult.recommended_action}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Instructions when inactive */}
       {!active && (
         <div style={{ marginTop: '20px' }}>
@@ -340,6 +675,15 @@ export default function ShieldMode() {
               <li>Alarm sounds if danger is detected</li>
               <li>Emergency contacts are alerted automatically</li>
             </ol>
+          </div>
+
+          <div className="glass-card-static" style={{ marginBottom: '12px' }}>
+            <h4>📤 Upload Audio</h4>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
+              Use the "Record Audio" or "Pick File" buttons above to record a clip
+              or select an existing audio file. The AI will listen and check for
+              any threats, harassment, or danger.
+            </p>
           </div>
 
           <div className="glass-card-static">
