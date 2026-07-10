@@ -115,7 +115,13 @@ def analyze_audio_file(audio_path: str) -> dict:
     """
     Analyze an audio file directly using Gemini's multimodal capabilities.
     This is an alternative to transcribe-then-analyze.
+    
+    IMPORTANT: Gemini Files API requires polling until the file reaches
+    ACTIVE state before it can be used in generate_content.
     """
+    import time
+    import json
+
     if not GEMINI_API_KEY:
         return {
             "threat_level": "SAFE",
@@ -124,10 +130,31 @@ def analyze_audio_file(audio_path: str) -> dict:
             "recommended_action": "Configure your Gemini API key"
         }
 
+    uploaded_file = None
     try:
         model = genai.GenerativeModel("gemini-2.0-flash")
 
-        audio_file = genai.upload_file(audio_path)
+        # Upload the file to Gemini Files API
+        print(f"📤 Uploading audio file: {audio_path}")
+        uploaded_file = genai.upload_file(audio_path)
+
+        # --- FIX: Poll until the file is ACTIVE (not PROCESSING) ---
+        # Without this, generate_content receives a file that isn't ready
+        # and silently fails or throws an error.
+        max_wait = 60  # seconds
+        waited = 0
+        while uploaded_file.state.name == "PROCESSING":
+            if waited >= max_wait:
+                raise TimeoutError("Gemini file processing timed out after 60s")
+            print(f"⏳ File processing... waiting ({waited}s)")
+            time.sleep(3)
+            waited += 3
+            uploaded_file = genai.get_file(uploaded_file.name)
+
+        if uploaded_file.state.name == "FAILED":
+            raise ValueError(f"Gemini file processing failed: {uploaded_file.state}")
+
+        print(f"✅ File is ACTIVE, running analysis...")
 
         prompt = """Analyze this audio recording for women's safety threats. Listen for:
 - Threatening language, aggression, intimidation
@@ -135,37 +162,54 @@ def analyze_audio_file(audio_path: str) -> dict:
 - Sounds of distress
 - Suspicious or dangerous situations
 
-Respond ONLY with valid JSON:
+Respond ONLY with valid JSON (no markdown, no code fences):
 {
-    "threat_level": "SAFE" or "SUSPICIOUS" or "DANGER",
-    "confidence": 0.0 to 1.0,
+    "threat_level": "SAFE",
+    "confidence": 0.0,
     "transcript": "What was said in the audio",
     "reason": "Brief explanation",
     "recommended_action": "What user should do"
-}"""
+}
+
+threat_level must be exactly one of: SAFE, SUSPICIOUS, or DANGER."""
 
         response = model.generate_content(
-            [prompt, audio_file],
+            [prompt, uploaded_file],
             generation_config=genai.types.GenerationConfig(
                 response_mime_type="application/json",
                 temperature=0.1,
             )
         )
 
-        import json
         result = json.loads(response.text)
 
         valid_levels = ["SAFE", "SUSPICIOUS", "DANGER"]
         if result.get("threat_level") not in valid_levels:
             result["threat_level"] = "SAFE"
 
-        return result
+        # Normalize to always have required fields
+        return {
+            "threat_level": result.get("threat_level", "SAFE"),
+            "confidence": float(result.get("confidence", 0.5)),
+            "transcript": result.get("transcript", ""),
+            "reason": result.get("reason", "Analysis complete"),
+            "recommended_action": result.get("recommended_action", "Stay alert"),
+        }
 
     except Exception as e:
         print(f"⚠️ Gemini audio analysis error: {e}")
         return {
             "threat_level": "SAFE",
             "confidence": 0.0,
-            "reason": f"Audio analysis error: {str(e)[:100]}",
-            "recommended_action": "Stay alert"
+            "transcript": "",
+            "reason": f"Audio analysis error: {str(e)[:200]}",
+            "recommended_action": "Stay alert — AI audio analysis temporarily unavailable"
         }
+    finally:
+        # Clean up: delete the uploaded file from Gemini Files API
+        if uploaded_file:
+            try:
+                genai.delete_file(uploaded_file.name)
+                print(f"🗑️ Deleted uploaded file from Gemini: {uploaded_file.name}")
+            except Exception:
+                pass  # non-critical

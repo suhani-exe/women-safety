@@ -10,3 +10,16 @@ JWT_SECRET_KEY=shieldher-hackathon-secret-change-me-2026
 
 # Google Gemini API Key (get free at https://aistudio.google.com)
 GEMINI_API_KEY=your-gemini-api-key-here
+
+# -------------------------------------------------------
+# Twilio SMS Credentials (required for real SMS delivery)
+# Sign up free at https://www.twilio.com/try-twilio
+# -------------------------------------------------------
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your-twilio-auth-token
+TWILIO_FROM_NUMBER=+15551234567   # Your Twilio phone number (E.164 format)
+
+# Optional: A real phone number to SMS when user opts to notify police.
+# Real emergency lines (100, 911) don't accept SMS — this would be a
+# police liaison / NGO number configured for your deployment.
+POLICE_SMS_NUMBER=

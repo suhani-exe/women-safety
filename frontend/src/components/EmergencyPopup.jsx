@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { apiFetch, useAuth, useToast } from '../App'
+import { apiFetch, useToast } from '../App'
 
 export default function EmergencyPopup({ type, onOk }) {
   const [countdown, setCountdown] = useState(15)
   const [triggered, setTriggered] = useState(false)
   const [emergencyData, setEmergencyData] = useState(null)
   const [alarmAudio, setAlarmAudio] = useState(null)
+  const [notifyPolice, setNotifyPolice] = useState(false)  // User's choice — optional
   const { showToast } = useToast()
 
   // Play alarm sound (disguised as phone alarm)
@@ -88,18 +89,31 @@ export default function EmergencyPopup({ type, onOk }) {
 
       const { latitude, longitude } = position.coords
 
-      // Trigger emergency protocol
+      // Trigger emergency protocol — SMS contacts is done server-side.
+      // notify_police is the user's explicit choice.
       const data = await apiFetch('/api/emergency/trigger', {
         method: 'POST',
         body: JSON.stringify({
           latitude,
           longitude,
           type,
+          notify_police: notifyPolice,
         }),
       })
 
       setEmergencyData(data)
-      showToast('🚨 Emergency alerts sent!', 'error')
+
+      // Count how many SMS were actually delivered
+      const sent = (data.sms_results || []).filter(r => r.sms_sent).length
+      const total = (data.sms_results || []).length
+
+      if (total === 0) {
+        showToast('🚨 Emergency logged! Add contacts to auto-notify.', 'error')
+      } else if (sent === total) {
+        showToast(`🚨 SOS! SMS sent to all ${total} contacts!`, 'error')
+      } else {
+        showToast(`🚨 SOS! SMS sent to ${sent}/${total} contacts.`, 'error')
+      }
 
       // Try to vibrate the phone
       if (navigator.vibrate) {
@@ -110,6 +124,7 @@ export default function EmergencyPopup({ type, onOk }) {
       // Even if API fails, show emergency UI with manual options
       setEmergencyData({
         contacts: [],
+        sms_results: [],
         emergency_numbers: [
           { name: 'Police (India)', phone: '100', tel_link: 'tel:100' },
           { name: 'Women Helpline', phone: '1091', tel_link: 'tel:1091' },
@@ -117,11 +132,18 @@ export default function EmergencyPopup({ type, onOk }) {
         ],
         sos_message: 'EMERGENCY! I need help!',
       })
+      showToast('⚠️ API error — use manual contacts below!', 'error')
     }
   }
 
   // Emergency triggered - show contact list
   if (triggered && emergencyData) {
+    // Build a map of sms_results by phone for quick lookup
+    const smsMap = {}
+    for (const r of (emergencyData.sms_results || [])) {
+      smsMap[r.phone] = r
+    }
+
     return (
       <div className="emergency-overlay">
         <div className="emergency-modal" style={{ maxWidth: '420px' }}>
@@ -156,18 +178,35 @@ export default function EmergencyPopup({ type, onOk }) {
           {emergencyData.contacts?.length > 0 && (
             <div style={{ marginBottom: '16px' }}>
               <h4 style={{ marginBottom: '8px', textAlign: 'left' }}>👥 Your Contacts</h4>
-              {emergencyData.contacts.map((contact, i) => (
-                <div key={i} className="emergency-contact-card">
-                  <div className="contact-info">
-                    <div className="contact-name">{contact.name}</div>
-                    <div className="contact-phone">{contact.phone}</div>
+              {emergencyData.contacts.map((contact, i) => {
+                const sms = smsMap[contact.phone]
+                return (
+                  <div key={i} className="emergency-contact-card">
+                    <div className="contact-info">
+                      <div className="contact-name">{contact.name}</div>
+                      <div className="contact-phone">{contact.phone}</div>
+                      {/* SMS delivery status */}
+                      {sms && (
+                        <div style={{ fontSize: '0.72rem', marginTop: '2px', color: sms.sms_sent ? '#10B981' : '#F59E0B' }}>
+                          {sms.sms_sent ? '✅ SMS delivered' : `⚠️ SMS failed — ${sms.sms_error || 'configure Twilio'}`}
+                        </div>
+                      )}
+                    </div>
+                    <div className="contact-actions">
+                      <a href={contact.tel_link} className="call-btn" title="Call">📞</a>
+                      <a href={contact.whatsapp_link} target="_blank" rel="noopener" className="whatsapp-btn" title="WhatsApp">💬</a>
+                    </div>
                   </div>
-                  <div className="contact-actions">
-                    <a href={contact.tel_link} className="call-btn" title="Call">📞</a>
-                    <a href={contact.whatsapp_link} target="_blank" rel="noopener" className="whatsapp-btn" title="WhatsApp">💬</a>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
+            </div>
+          )}
+
+          {emergencyData.contacts?.length === 0 && (
+            <div className="glass-card-static" style={{ marginBottom: '16px', padding: '10px 16px' }}>
+              <p style={{ fontSize: '0.82rem', color: '#F59E0B' }}>
+                ⚠️ No emergency contacts saved. Go to Contacts to add them.
+              </p>
             </div>
           )}
 
@@ -202,9 +241,32 @@ export default function EmergencyPopup({ type, onOk }) {
           />
         </div>
 
-        <p className="text-muted" style={{ marginBottom: '20px', fontSize: '0.8rem' }}>
+        <p className="text-muted" style={{ marginBottom: '16px', fontSize: '0.8rem' }}>
           Emergency will be triggered automatically if no response
         </p>
+
+        {/* Optional police notification toggle */}
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            marginBottom: '20px',
+            fontSize: '0.82rem',
+            color: 'var(--text-secondary)',
+            justifyContent: 'center',
+          }}
+        >
+          <input
+            type="checkbox"
+            id="notify-police-toggle"
+            checked={notifyPolice}
+            onChange={e => setNotifyPolice(e.target.checked)}
+            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+          />
+          Also notify police (optional)
+        </label>
 
         <button className="btn btn-safe btn-ok" onClick={handleOk}>
           ✅ I'm Okay!
@@ -217,3 +279,4 @@ export default function EmergencyPopup({ type, onOk }) {
     </div>
   )
 }
+

@@ -16,6 +16,47 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ============================================
+# Twilio SMS Helper
+# ============================================
+
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")  # E.164 format e.g. +15551234567
+
+def send_sms(to_phone: str, message: str) -> dict:
+    """
+    Send an SMS via Twilio REST API.
+    Returns { success: bool, error: str|None }.
+    Falls back gracefully if Twilio is not configured.
+    """
+    if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER]):
+        print(f"⚠️ Twilio not configured — SMS NOT sent to {to_phone}")
+        return {"success": False, "error": "Twilio not configured"}
+
+    try:
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json"
+        resp = requests.post(
+            url,
+            data={
+                "From": TWILIO_FROM_NUMBER,
+                "To": to_phone,
+                "Body": message,
+            },
+            auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+            timeout=10,
+        )
+        if resp.status_code in (200, 201):
+            print(f"✅ SMS sent to {to_phone}")
+            return {"success": True, "error": None}
+        else:
+            err = resp.json().get("message", resp.text[:200])
+            print(f"❌ SMS failed to {to_phone}: {err}")
+            return {"success": False, "error": err}
+    except Exception as e:
+        print(f"❌ SMS exception to {to_phone}: {e}")
+        return {"success": False, "error": str(e)}
+
 from database import (
     init_db, create_user, get_user_by_email, get_user_by_id, update_user,
     add_contact, get_contacts, delete_contact,
@@ -90,6 +131,7 @@ class EmergencyRequest(BaseModel):
     longitude: float
     type: str = "manual"  # manual, audio, shake
     transcript: Optional[str] = None
+    notify_police: bool = False  # Optional: also SMS police helpline (user's choice)
 
 class LocationUpdate(BaseModel):
     latitude: float
@@ -278,7 +320,9 @@ def get_audio_history(user_id: int = Depends(get_current_user_id)):
 def trigger_emergency(req: EmergencyRequest, user_id: int = Depends(get_current_user_id)):
     """
     Trigger the emergency protocol.
-    Logs the incident and returns contact info for the frontend to make calls/messages.
+    - ALWAYS sends SMS to all emergency contacts via Twilio.
+    - Optionally notifies police helpline if notify_police=True.
+    - Returns contact info + deep links for the frontend UI.
     """
     # Log the incident
     incident = create_incident(
@@ -290,24 +334,56 @@ def trigger_emergency(req: EmergencyRequest, user_id: int = Depends(get_current_
         lng=req.longitude
     )
 
-    # Get emergency contacts
+    # Get emergency contacts and user info
     contacts = get_contacts(user_id)
-
-    # Get user info
     user = get_user_by_id(user_id)
 
     # Build the SOS message
     maps_link = f"https://www.google.com/maps?q={req.latitude},{req.longitude}"
     sos_message = (
-        f"🚨 EMERGENCY SOS from {user['name']}!\n"
+        f"\U0001f6a8 EMERGENCY SOS from {user['name']}!\n"
         f"They need immediate help!\n"
-        f"📍 Location: {maps_link}\n"
+        f"\U0001f4cd Location: {maps_link}\n"
         f"Time: {datetime.now().strftime('%I:%M %p, %b %d %Y')}\n"
         f"Type: {req.type}\n"
         f"Please call them or emergency services immediately!"
     )
 
-    # Build WhatsApp deep links for each contact
+    # -------------------------------------------------------
+    # ALWAYS send SMS to every emergency contact via Twilio
+    # -------------------------------------------------------
+    sms_results = []
+    for contact in contacts:
+        result = send_sms(contact["phone"], sos_message)
+        sms_results.append({
+            "contact": contact["name"],
+            "phone": contact["phone"],
+            "sms_sent": result["success"],
+            "sms_error": result.get("error"),
+        })
+
+    # -------------------------------------------------------
+    # OPTIONALLY notify police — only if user explicitly chose to
+    # -------------------------------------------------------
+    police_sms_result = None
+    if req.notify_police:
+        # India women helpline as example; adapt as needed
+        police_msg = (
+            f"\U0001f6a8 POLICE ASSISTANCE NEEDED\n"
+            f"Name: {user['name']}\n"
+            f"Phone: {user.get('phone', 'N/A')}\n"
+            f"Location: {maps_link}\n"
+            f"Time: {datetime.now().strftime('%I:%M %p, %b %d %Y')}"
+        )
+        # NOTE: Real emergency numbers (100, 911) don't accept SMS.
+        # This would go to a configured police liaison number in production.
+        police_number = os.getenv("POLICE_SMS_NUMBER", "")
+        if police_number:
+            police_sms_result = send_sms(police_number, police_msg)
+        else:
+            police_sms_result = {"success": False, "error": "POLICE_SMS_NUMBER not configured"}
+
+    # Build WhatsApp deep links for each contact (for manual follow-up in UI)
     contact_alerts = []
     for contact in contacts:
         phone_clean = contact["phone"].replace("+", "").replace(" ", "").replace("-", "")
@@ -319,13 +395,15 @@ def trigger_emergency(req: EmergencyRequest, user_id: int = Depends(get_current_
             "phone": contact["phone"],
             "relationship": contact.get("relationship"),
             "whatsapp_link": whatsapp_link,
-            "tel_link": tel_link
+            "tel_link": tel_link,
         })
 
     return {
         "incident": incident,
         "sos_message": sos_message,
         "contacts": contact_alerts,
+        "sms_results": sms_results,          # Twilio delivery status per contact
+        "police_notified": police_sms_result,
         "emergency_numbers": [
             {"name": "Police (India)", "phone": "100", "tel_link": "tel:100"},
             {"name": "Women Helpline", "phone": "1091", "tel_link": "tel:1091"},
@@ -355,7 +433,7 @@ def find_nearest_police(req: LocationUpdate):
         # Overpass API query for police stations within 5km radius
         overpass_url = "https://overpass-api.de/api/interpreter"
         query = f"""
-        [out:json][timeout:10];
+        [out:json][timeout:15];
         (
           node["amenity"="police"](around:5000,{req.latitude},{req.longitude});
           way["amenity"="police"](around:5000,{req.latitude},{req.longitude});
@@ -363,7 +441,18 @@ def find_nearest_police(req: LocationUpdate):
         out center body;
         """
 
-        response = requests.get(overpass_url, params={"data": query}, timeout=10)
+        # FIX: Overpass API requires a User-Agent header or it may reject the request.
+        # Without this header, many Overpass mirrors return 429 or silently drop the query.
+        headers = {
+            "User-Agent": "ShieldHer-SafetyApp/1.0 (women-safety-hackathon)"
+        }
+        response = requests.get(
+            overpass_url,
+            params={"data": query},
+            headers=headers,
+            timeout=15,
+        )
+        response.raise_for_status()  # surface HTTP errors (429, 503, etc.)
         data = response.json()
 
         stations = []
@@ -380,11 +469,14 @@ def find_nearest_police(req: LocationUpdate):
                     "phone": element.get("tags", {}).get("phone", ""),
                 })
 
+        if not stations:
+            print(f"ℹ️ No police stations found within 5km of {req.latitude},{req.longitude}")
+
         return {"stations": stations[:10]}  # Return top 10 nearest
 
     except Exception as e:
         print(f"⚠️ Overpass API error: {e}")
-        return {"stations": [], "error": "Could not fetch police stations"}
+        return {"stations": [], "error": f"Could not fetch police stations: {str(e)[:100]}"}
 
 
 # ============================================
