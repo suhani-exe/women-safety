@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch, useEmergency, useToast } from '../App'
+import { useEmergency, useToast } from '../App'
+
+const API_BASE = 'http://localhost:8000'
+const WS_BASE = API_BASE.replace(/^http/, 'ws')
 
 export default function ShieldMode() {
   const navigate = useNavigate()
@@ -12,6 +15,18 @@ export default function ShieldMode() {
   const [analysisLog, setAnalysisLog] = useState([])
   const [currentTranscript, setCurrentTranscript] = useState('')
   const [listening, setListening] = useState(false)
+  const [wsStatus, setWsStatus] = useState('disconnected')
+  const [alarm, setAlarm] = useState(null)
+  const [sosResult, setSosResult] = useState(null)
+  const [sessionStats, setSessionStats] = useState({
+    sessionId: null,
+    chunks: 0,
+    bytes: 0,
+    lastLocationAt: null,
+    state: 'LISTENING',
+    score: 0,
+    transcripts: 0,
+  })
 
   // --- Upload / Record state ---
   const [recording, setRecording] = useState(false)
@@ -25,18 +40,213 @@ export default function ShieldMode() {
   const animationRef = useRef(null)
   const audioContextRef = useRef(null)
   const analyserRef = useRef(null)
-  const recognitionRef = useRef(null)
-  const transcriptBufferRef = useRef('')
-  const analysisIntervalRef = useRef(null)
-
-  // --- Upload / Record refs ---
+  const mediaStreamRef = useRef(null)
   const mediaRecorderRef = useRef(null)
-  const recordedChunksRef = useRef([])
-  const recordTimerRef = useRef(null)
-  const fileInputRef = useRef(null)
-  const recordStreamRef = useRef(null)
+  const recognitionRef = useRef(null)
+  const websocketRef = useRef(null)
+  const locationIntervalRef = useRef(null)
+  const pingIntervalRef = useRef(null)
+  const activeRef = useRef(false)
 
-  // Setup audio visualizer
+  const sendWsJson = useCallback((payload) => {
+    const ws = websocketRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false
+    ws.send(JSON.stringify(payload))
+    return true
+  }, [])
+
+  const getCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) return
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        sendWsJson({
+          type: 'location',
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        })
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 3000 }
+    )
+  }, [sendWsJson])
+
+  const addLogEntry = useCallback((entry) => {
+    setAnalysisLog(prev => [
+      {
+        timestamp: new Date().toLocaleTimeString(),
+        level: 'SAFE',
+        transcript: '',
+        ...entry,
+      },
+      ...prev.slice(0, 19),
+    ])
+  }, [])
+
+  const connectRealtimeSession = useCallback(() => {
+    const token = localStorage.getItem('shieldher_token')
+    if (!token) {
+      showToast('Please login again to start Shield Mode', 'error')
+      return null
+    }
+
+    const ws = new WebSocket(`${WS_BASE}/api/ws/audio?token=${encodeURIComponent(token)}`)
+    websocketRef.current = ws
+    setWsStatus('connecting')
+
+    ws.onopen = () => {
+      setWsStatus('connected')
+      showToast('Realtime monitoring connected', 'success')
+      getCurrentLocation()
+      locationIntervalRef.current = setInterval(getCurrentLocation, 5000)
+      pingIntervalRef.current = setInterval(() => sendWsJson({ type: 'ping' }), 15000)
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data)
+
+        if (message.type === 'session_started') {
+          setSessionStats(prev => ({
+            ...prev,
+            sessionId: message.session?.session_id || null,
+          }))
+          addLogEntry({ reason: 'Realtime session started' })
+        }
+
+        if (message.type === 'audio_ack') {
+          setSessionStats(prev => ({
+            ...prev,
+            sessionId: message.session_id || prev.sessionId,
+            chunks: message.audio_chunks_received || prev.chunks,
+            bytes: message.audio_bytes_received || prev.bytes,
+          }))
+        }
+
+        if (message.type === 'location_ack') {
+          setSessionStats(prev => ({
+            ...prev,
+            sessionId: message.session_id || prev.sessionId,
+            lastLocationAt: new Date().toLocaleTimeString(),
+          }))
+        }
+
+        if (message.type === 'transcript_ack') {
+          setSessionStats(prev => ({
+            ...prev,
+            transcripts: prev.transcripts + 1,
+          }))
+          addLogEntry({
+            reason: 'Transcript received by realtime session',
+            transcript: (message.transcript || '').substring(0, 100),
+          })
+        }
+
+        if (message.type === 'threat_update') {
+          const threat = message.threat || {}
+          setThreatLevel(threat.level || 'SAFE')
+          setSessionStats(prev => ({
+            ...prev,
+            sessionId: message.session_id || prev.sessionId,
+            state: message.session_state || threat.state || prev.state,
+            score: threat.score ?? prev.score,
+          }))
+          addLogEntry({
+            level: threat.level || 'SAFE',
+            reason: `${threat.summary || 'Threat update'} Score: ${threat.score ?? 0}. ${threat.reason || ''}`,
+            transcript: (threat.signals || [])
+              .map(signal => `${signal.name}+${signal.score}`)
+              .join(', '),
+          })
+
+          if (threat.level === 'DANGER') {
+            showToast('Danger detected. Alarm countdown started.', 'error')
+          }
+        }
+
+        if (message.type === 'alarm_started') {
+          setAlarm({
+            active: true,
+            remaining: message.countdown_seconds || 15,
+            threat: message.threat,
+          })
+          setSosResult(null)
+          addLogEntry({
+            level: 'DANGER',
+            reason: `Alarm started. SOS will send in ${message.countdown_seconds || 15} seconds unless cancelled.`,
+            transcript: '',
+          })
+        }
+
+        if (message.type === 'alarm_tick') {
+          setAlarm(prev => prev ? { ...prev, remaining: message.remaining_seconds } : prev)
+        }
+
+        if (message.type === 'alarm_cancelled') {
+          setAlarm(null)
+          setThreatLevel('SAFE')
+          setSessionStats(prev => ({
+            ...prev,
+            state: 'LISTENING',
+            score: 0,
+          }))
+          addLogEntry({
+            level: 'SAFE',
+            reason: 'Alarm cancelled by user.',
+            transcript: message.reason || '',
+          })
+          showToast('SOS cancelled', 'warning')
+        }
+
+        if (message.type === 'sos_sent') {
+          setAlarm(null)
+          setSosResult(message.notification)
+          setSessionStats(prev => ({
+            ...prev,
+            state: 'SOS_SENT',
+          }))
+          addLogEntry({
+            level: message.notification?.success ? 'DANGER' : 'SUSPICIOUS',
+            reason: message.notification?.success
+              ? 'SOS sent to emergency contacts.'
+              : 'SOS attempted, but SMS delivery did not succeed.',
+            transcript: '',
+          })
+          showToast(
+            message.notification?.success ? 'SOS sent to emergency contacts' : 'SOS attempted, SMS failed',
+            message.notification?.success ? 'success' : 'error'
+          )
+        }
+
+        if (message.type === 'sos_error') {
+          setAlarm(null)
+          showToast(message.message || 'SOS failed', 'error')
+        }
+
+        if (message.type === 'error') {
+          showToast(message.message || 'Realtime session error', 'error')
+        }
+      } catch (err) {
+        console.log('WebSocket message parse error:', err)
+      }
+    }
+
+    ws.onerror = () => {
+      setWsStatus('error')
+      showToast('Realtime connection failed', 'error')
+    }
+
+    ws.onclose = () => {
+      setWsStatus('disconnected')
+      if (locationIntervalRef.current) clearInterval(locationIntervalRef.current)
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current)
+      locationIntervalRef.current = null
+      pingIntervalRef.current = null
+    }
+
+    return ws
+  }, [addLogEntry, getCurrentLocation, sendWsJson, showToast])
+
   const setupVisualizer = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -49,10 +259,11 @@ export default function ShieldMode() {
 
       audioContextRef.current = audioContext
       analyserRef.current = analyser
+      mediaStreamRef.current = stream
 
-      // Draw waveform
       const canvas = canvasRef.current
-      if (!canvas) return
+      if (!canvas) return stream
+
       const ctx = canvas.getContext('2d')
       canvas.width = canvas.offsetWidth * 2
       canvas.height = canvas.offsetHeight * 2
@@ -67,17 +278,14 @@ export default function ShieldMode() {
 
         const barWidth = (canvas.width / bufferLength) * 2.5
         let x = 0
+        const colors = {
+          SAFE: 'rgba(16, 185, 129, 0.65)',
+          SUSPICIOUS: 'rgba(245, 158, 11, 0.65)',
+          DANGER: 'rgba(239, 68, 68, 0.65)',
+        }
 
         for (let i = 0; i < bufferLength; i++) {
           const barHeight = (dataArray[i] / 255) * canvas.height * 0.8
-
-          // Color based on threat level
-          const colors = {
-            SAFE: `rgba(16, 185, 129, ${0.4 + dataArray[i] / 400})`,
-            SUSPICIOUS: `rgba(245, 158, 11, ${0.4 + dataArray[i] / 400})`,
-            DANGER: `rgba(239, 68, 68, ${0.4 + dataArray[i] / 400})`,
-          }
-
           ctx.fillStyle = colors[threatLevel] || colors.SAFE
           ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight)
           x += barWidth + 1
@@ -95,7 +303,27 @@ export default function ShieldMode() {
     }
   }, [threatLevel, showToast])
 
-  // Setup Web Speech API for transcription
+  const startAudioStreaming = useCallback((stream) => {
+    if (!stream || !window.MediaRecorder) {
+      showToast('Audio streaming not supported in this browser', 'warning')
+      return
+    }
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm'
+
+    const recorder = new MediaRecorder(stream, { mimeType })
+    recorder.ondataavailable = async (event) => {
+      const ws = websocketRef.current
+      if (!event.data.size || !ws || ws.readyState !== WebSocket.OPEN) return
+      ws.send(await event.data.arrayBuffer())
+    }
+    recorder.onerror = () => showToast('Audio stream error', 'error')
+    recorder.start(1000)
+    mediaRecorderRef.current = recorder
+  }, [showToast])
+
   const setupSpeechRecognition = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SpeechRecognition) {
@@ -110,303 +338,119 @@ export default function ShieldMode() {
 
     recognition.onresult = (event) => {
       let transcript = ''
+      let finalTranscript = ''
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript
+        }
       }
+
       setCurrentTranscript(transcript)
-      transcriptBufferRef.current = transcript
+
+      const text = (finalTranscript || transcript).trim()
+      if (text) {
+        sendWsJson({
+          type: 'transcript',
+          text,
+          is_final: Boolean(finalTranscript),
+        })
+      }
     }
 
     recognition.onerror = (event) => {
       console.log('Speech recognition error:', event.error)
-      if (event.error === 'no-speech' || event.error === 'aborted') {
-        // Restart recognition
-        try { recognition.start() } catch (e) { /* ignore */ }
+      if ((event.error === 'no-speech' || event.error === 'aborted') && activeRef.current) {
+        try { recognition.start() } catch (e) { /* ignore restart races */ }
       }
     }
 
     recognition.onend = () => {
-      // Auto-restart if still active
-      if (active) {
-        try { recognition.start() } catch (e) { /* ignore */ }
+      if (activeRef.current) {
+        try { recognition.start() } catch (e) { /* ignore restart races */ }
       }
     }
 
     recognitionRef.current = recognition
     return recognition
-  }, [active, showToast])
+  }, [sendWsJson, showToast])
 
-  // Analyze transcript with AI every 5 seconds
-  const startAnalysis = useCallback(() => {
-    analysisIntervalRef.current = setInterval(async () => {
-      const transcript = transcriptBufferRef.current
-      if (!transcript || transcript.trim() === '') return
+  const cleanupRealtime = useCallback(() => {
+    if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop() } catch (e) { /* ignore */ }
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop())
+    }
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close() } catch (e) { /* ignore */ }
+    }
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch (e) { /* ignore */ }
+    }
+    if (locationIntervalRef.current) clearInterval(locationIntervalRef.current)
+    if (pingIntervalRef.current) clearInterval(pingIntervalRef.current)
+    if (websocketRef.current) websocketRef.current.close()
 
-      try {
-        // Get location for context
-        let lat = null, lng = null
-        try {
-          const pos = await new Promise((resolve, reject) =>
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 })
-          )
-          lat = pos.coords.latitude
-          lng = pos.coords.longitude
-        } catch (e) { /* location optional */ }
+    animationRef.current = null
+    mediaRecorderRef.current = null
+    mediaStreamRef.current = null
+    audioContextRef.current = null
+    recognitionRef.current = null
+    websocketRef.current = null
+    locationIntervalRef.current = null
+    pingIntervalRef.current = null
+  }, [])
 
-        const data = await apiFetch('/api/audio/analyze', {
-          method: 'POST',
-          body: JSON.stringify({
-            transcript,
-            latitude: lat,
-            longitude: lng,
-          }),
-        })
-
-        const analysis = data.analysis
-        setThreatLevel(analysis.threat_level)
-
-        setAnalysisLog(prev => [
-          {
-            timestamp: new Date().toLocaleTimeString(),
-            level: analysis.threat_level,
-            reason: analysis.reason,
-            transcript: transcript.substring(0, 100),
-          },
-          ...prev.slice(0, 19), // Keep last 20
-        ])
-
-        // If DANGER, trigger emergency
-        if (analysis.threat_level === 'DANGER') {
-          triggerEmergency('audio')
-        }
-
-        // Clear buffer for next analysis
-        transcriptBufferRef.current = ''
-      } catch (err) {
-        console.error('Analysis error:', err)
-      }
-    }, 5000) // Every 5 seconds
-  }, [triggerEmergency])
-
-  // Activate Shield Mode
   const activateShield = async () => {
+    activeRef.current = true
     setActive(true)
     setThreatLevel('SAFE')
-    showToast('🛡️ Shield Mode activated!', 'success')
+    setSessionStats({ sessionId: null, chunks: 0, bytes: 0, lastLocationAt: null, state: 'LISTENING', score: 0, transcripts: 0 })
+    showToast('Shield Mode activated', 'success')
 
-    // Setup audio visualizer
-    await setupVisualizer()
+    connectRealtimeSession()
 
-    // Setup speech recognition
+    const stream = await setupVisualizer()
+    if (stream) {
+      startAudioStreaming(stream)
+    }
+
     const recognition = setupSpeechRecognition()
     if (recognition) {
       recognition.start()
       setListening(true)
     }
-
-    // Start AI analysis
-    startAnalysis()
   }
 
-  // Deactivate Shield Mode
   const deactivateShield = () => {
+    if (alarm?.active) {
+      sendWsJson({
+        type: 'cancel_sos',
+        reason: 'Shield Mode stopped by user',
+      })
+    }
+    activeRef.current = false
     setActive(false)
     setListening(false)
     setThreatLevel('SAFE')
     setCurrentTranscript('')
-
-    // Cleanup
-    if (animationRef.current) cancelAnimationFrame(animationRef.current)
-    if (audioContextRef.current) audioContextRef.current.close()
-    if (recognitionRef.current) recognitionRef.current.stop()
-    if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current)
-
+    setAlarm(null)
+    cleanupRealtime()
     showToast('Shield Mode deactivated', 'warning')
   }
 
-  // ============================================
-  // Audio Recording (MediaRecorder API)
-  // ============================================
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      recordStreamRef.current = stream
-
-      // Prefer webm (Gemini supports it), fall back to whatever is available
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : 'audio/mp4'
-
-      const recorder = new MediaRecorder(stream, { mimeType })
-      recordedChunksRef.current = []
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          recordedChunksRef.current.push(e.data)
-        }
-      }
-
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: mimeType })
-        setRecordedBlob(blob)
-        // Stop all tracks to release mic
-        stream.getTracks().forEach(t => t.stop())
-        recordStreamRef.current = null
-      }
-
-      mediaRecorderRef.current = recorder
-      recorder.start(250) // collect data in 250ms chunks
-      setRecording(true)
-      setRecordingTime(0)
-      setUploadResult(null)
-      setRecordedBlob(null)
-      setSelectedFile(null)
-
-      // Timer for display
-      recordTimerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1)
-      }, 1000)
-
-      showToast('🎙️ Recording started...', 'success')
-    } catch (err) {
-      console.error('Recording error:', err)
-      showToast('Could not access microphone', 'error')
-    }
+  const cancelSos = () => {
+    sendWsJson({
+      type: 'cancel_sos',
+      reason: 'User marked safe from Shield Mode',
+    })
   }
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop()
-    }
-    setRecording(false)
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current)
-      recordTimerRef.current = null
-    }
-    showToast('Recording saved! Tap "Analyze" to check for threats.', 'success')
-  }
+  useEffect(() => cleanupRealtime, [cleanupRealtime])
 
-  const discardRecording = () => {
-    setRecordedBlob(null)
-    setUploadResult(null)
-    setRecordingTime(0)
-  }
-
-  // ============================================
-  // File Pick
-  // ============================================
-
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('audio/')) {
-      showToast('Please select an audio file', 'error')
-      return
-    }
-    setSelectedFile(file)
-    setRecordedBlob(null)
-    setUploadResult(null)
-    showToast(`Selected: ${file.name}`, 'success')
-  }
-
-  // ============================================
-  // Upload & Analyze
-  // ============================================
-
-  const analyzeAudio = async () => {
-    const audioSource = recordedBlob || selectedFile
-    if (!audioSource) {
-      showToast('No audio to analyze — record or pick a file first', 'warning')
-      return
-    }
-
-    setUploadingAudio(true)
-    setUploadResult(null)
-
-    try {
-      // Get location
-      let lat = null, lng = null
-      try {
-        const pos = await new Promise((resolve, reject) =>
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 })
-        )
-        lat = pos.coords.latitude
-        lng = pos.coords.longitude
-      } catch (e) { /* optional */ }
-
-      const formData = new FormData()
-
-      if (recordedBlob) {
-        // Determine file extension from MIME type
-        const ext = recordedBlob.type.includes('webm') ? 'webm' : recordedBlob.type.includes('mp4') ? 'mp4' : 'wav'
-        formData.append('audio', recordedBlob, `recording.${ext}`)
-      } else {
-        formData.append('audio', selectedFile)
-      }
-
-      if (lat != null) formData.append('latitude', lat)
-      if (lng != null) formData.append('longitude', lng)
-
-      const data = await apiFetch('/api/audio/upload', {
-        method: 'POST',
-        body: formData,
-        // Note: apiFetch already skips Content-Type for FormData
-      })
-
-      setUploadResult(data.analysis)
-
-      if (data.analysis?.threat_level === 'DANGER') {
-        triggerEmergency('audio')
-      }
-
-      showToast(
-        data.analysis?.threat_level === 'SAFE'
-          ? '✅ Audio analyzed — no threats detected'
-          : data.analysis?.threat_level === 'DANGER'
-            ? '🚨 DANGER detected in audio!'
-            : '⚠️ Suspicious content detected',
-        data.analysis?.threat_level === 'SAFE' ? 'success' : 'error'
-      )
-    } catch (err) {
-      console.error('Upload analysis error:', err)
-      showToast(`Analysis failed: ${err.message}`, 'error')
-    } finally {
-      setUploadingAudio(false)
-    }
-  }
-
-  // Format recording time as MM:SS
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0')
-    const s = (seconds % 60).toString().padStart(2, '0')
-    return `${m}:${s}`
-  }
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current)
-      if (audioContextRef.current) {
-        try { audioContextRef.current.close() } catch(e) {}
-      }
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop() } catch(e) {}
-      }
-      if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current)
-      if (recordTimerRef.current) clearInterval(recordTimerRef.current)
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try { mediaRecorderRef.current.stop() } catch(e) {}
-      }
-      if (recordStreamRef.current) {
-        recordStreamRef.current.getTracks().forEach(t => t.stop())
-      }
-    }
-  }, [])
-
-  // Setup shake detection
   useEffect(() => {
     let lastMagnitude = 0
     const SHAKE_THRESHOLD = 25
@@ -424,10 +468,7 @@ export default function ShieldMode() {
       }
     }
 
-    // Request permission on iOS
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-      // Will need user gesture to request permission
-    } else {
+    if (!(typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')) {
       window.addEventListener('devicemotion', handleMotion)
     }
 
@@ -439,57 +480,95 @@ export default function ShieldMode() {
   return (
     <div className="page-content page-enter shield-page">
       <div className="page-header">
-        <button className="back-btn" onClick={() => navigate('/dashboard')}>←</button>
+        <button className="back-btn" onClick={() => navigate('/dashboard')}>Back</button>
         <h2>Shield Mode</h2>
       </div>
 
-      {/* Shield Button */}
       <div className="shield-btn-container">
         <button
           className={`shield-btn ${active ? 'active' : ''}`}
           onClick={active ? deactivateShield : activateShield}
         >
-          <span className="shield-icon">{active ? '🔴' : '🛡️'}</span>
+          <span className="shield-icon">{active ? 'REC' : 'SHIELD'}</span>
           {active ? 'STOP' : 'ACTIVATE'}
         </button>
       </div>
 
       <p className="text-secondary" style={{ marginBottom: '20px' }}>
         {active
-          ? '🟢 Listening and analyzing for threats...'
-          : 'Tap to start AI-powered audio monitoring'}
+          ? `Listening via realtime session (${wsStatus})`
+          : 'Tap to start audio monitoring'}
       </p>
 
-      {/* Audio Waveform Visualization */}
       {active && (
         <>
           <div className="waveform-container">
             <canvas ref={canvasRef} />
           </div>
 
-          {/* Threat Level Indicator */}
           <div className={`threat-indicator ${threatLevel.toLowerCase()}`}>
-            {threatLevel === 'SAFE' && '✅ Environment is SAFE'}
-            {threatLevel === 'SUSPICIOUS' && '⚠️ SUSPICIOUS activity detected'}
-            {threatLevel === 'DANGER' && '🚨 DANGER detected!'}
+            {threatLevel === 'SAFE' && 'Environment is SAFE'}
+            {threatLevel === 'SUSPICIOUS' && 'SUSPICIOUS activity detected'}
+            {threatLevel === 'DANGER' && 'DANGER detected'}
           </div>
 
-          {/* Current Transcript */}
+          {alarm?.active && (
+            <div className="glass-card-static" style={{ marginBottom: '16px', textAlign: 'center', borderColor: 'rgba(239, 68, 68, 0.5)' }}>
+              <h3 style={{ color: '#EF4444', marginBottom: '8px' }}>Emergency Detected</h3>
+              <p style={{ marginBottom: '12px' }}>
+                SOS will be sent in <strong>{alarm.remaining}</strong> seconds.
+              </p>
+              <button className="btn btn-primary" onClick={cancelSos}>
+                I am safe - Cancel SOS
+              </button>
+            </div>
+          )}
+
+          {sosResult && (
+            <div className="glass-card-static" style={{ marginBottom: '16px', textAlign: 'left' }}>
+              <p style={{ fontWeight: 700, marginBottom: '6px' }}>
+                {sosResult.success ? 'SOS sent' : 'SOS attempted'}
+              </p>
+              <p className="text-muted" style={{ fontSize: '0.8rem' }}>
+                SMS success: {sosResult.success ? 'yes' : 'no'}
+              </p>
+              {sosResult.maps_link && (
+                <a href={sosResult.maps_link} target="_blank" rel="noreferrer">
+                  Open location
+                </a>
+              )}
+            </div>
+          )}
+
+          <div className="glass-card-static" style={{ marginBottom: '16px', textAlign: 'left' }}>
+            <p className="text-muted" style={{ fontSize: '0.75rem', marginBottom: '6px' }}>
+              Realtime Session
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
+              <span>Status: {wsStatus}</span>
+              <span>Chunks: {sessionStats.chunks}</span>
+              <span>Bytes: {sessionStats.bytes}</span>
+              <span>GPS: {sessionStats.lastLocationAt || 'pending'}</span>
+              <span>State: {sessionStats.state}</span>
+              <span>Score: {sessionStats.score}</span>
+              <span>Texts: {sessionStats.transcripts}</span>
+            </div>
+          </div>
+
           {currentTranscript && (
             <div className="glass-card-static" style={{ marginBottom: '16px', textAlign: 'left' }}>
               <p className="text-muted" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>
-                🎤 Live Transcript
+                Live Transcript
               </p>
               <p style={{ fontSize: '0.85rem' }}>{currentTranscript}</p>
             </div>
           )}
 
-          {/* Analysis Log */}
           <div className="analysis-log">
-            <h4 style={{ marginBottom: '8px', textAlign: 'left' }}>📊 Analysis Log</h4>
+            <h4 style={{ marginBottom: '8px', textAlign: 'left' }}>Realtime Log</h4>
             {analysisLog.length === 0 ? (
               <p className="text-muted" style={{ fontSize: '0.82rem' }}>
-                Waiting for speech to analyze...
+                Waiting for realtime events...
               </p>
             ) : (
               analysisLog.map((entry, i) => (
@@ -511,169 +590,15 @@ export default function ShieldMode() {
         </>
       )}
 
-      {/* ============================================
-          Upload & Record Section — always visible
-          ============================================ */}
-      <div className="upload-section" style={{ marginTop: '28px' }}>
-        <h3 style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          📤 Upload &amp; Analyze Audio
-        </h3>
-        <p className="text-secondary" style={{ fontSize: '0.82rem', marginBottom: '16px' }}>
-          Record a clip or pick an audio file — AI will check for threats.
-        </p>
-
-        {/* Record / Stop buttons */}
-        <div className="upload-actions">
-          {!recording ? (
-            <button
-              className="btn btn-primary"
-              onClick={startRecording}
-              disabled={uploadingAudio}
-              style={{ flex: 1 }}
-            >
-              🎙️ Record Audio
-            </button>
-          ) : (
-            <button
-              className="btn btn-danger"
-              onClick={stopRecording}
-              style={{ flex: 1 }}
-            >
-              ⏹ Stop ({formatTime(recordingTime)})
-            </button>
-          )}
-
-          <button
-            className="btn btn-outline"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={recording || uploadingAudio}
-            style={{ flex: 1 }}
-          >
-            📁 Pick File
-          </button>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="audio/*"
-            style={{ display: 'none' }}
-            onChange={handleFileSelect}
-          />
-        </div>
-
-        {/* Recording indicator */}
-        {recording && (
-          <div className="recording-indicator">
-            <span className="rec-dot" />
-            <span>Recording… {formatTime(recordingTime)}</span>
-          </div>
-        )}
-
-        {/* Pending audio preview */}
-        {(recordedBlob || selectedFile) && !recording && (
-          <div className="audio-pending glass-card-static" style={{ marginTop: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>
-                {recordedBlob
-                  ? `🎙️ Recorded clip (${formatTime(recordingTime)})`
-                  : `📁 ${selectedFile.name}`}
-              </span>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => { discardRecording(); setSelectedFile(null); }}
-                title="Discard"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Playback */}
-            {recordedBlob && (
-              <audio
-                controls
-                src={URL.createObjectURL(recordedBlob)}
-                style={{ width: '100%', marginBottom: '10px', borderRadius: '8px' }}
-              />
-            )}
-            {selectedFile && (
-              <audio
-                controls
-                src={URL.createObjectURL(selectedFile)}
-                style={{ width: '100%', marginBottom: '10px', borderRadius: '8px' }}
-              />
-            )}
-
-            <button
-              className="btn btn-primary btn-full"
-              onClick={analyzeAudio}
-              disabled={uploadingAudio}
-            >
-              {uploadingAudio ? (
-                <>
-                  <span className="spin" style={{ display: 'inline-block' }}>⏳</span>
-                  {' '}Analyzing with AI…
-                </>
-              ) : (
-                '🔍 Analyze for Threats'
-              )}
-            </button>
-          </div>
-        )}
-
-        {/* Upload Result */}
-        {uploadResult && (
-          <div
-            className={`upload-result glass-card-static threat-indicator ${uploadResult.threat_level?.toLowerCase()}`}
-            style={{ marginTop: '16px', textAlign: 'left' }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-                {uploadResult.threat_level === 'SAFE' && '✅ SAFE'}
-                {uploadResult.threat_level === 'SUSPICIOUS' && '⚠️ SUSPICIOUS'}
-                {uploadResult.threat_level === 'DANGER' && '🚨 DANGER'}
-              </span>
-              <span className="text-muted" style={{ fontSize: '0.78rem' }}>
-                Confidence: {Math.round((uploadResult.confidence || 0) * 100)}%
-              </span>
-            </div>
-
-            {uploadResult.transcript && (
-              <div style={{ marginBottom: '8px' }}>
-                <p className="text-muted" style={{ fontSize: '0.72rem', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Transcript
-                </p>
-                <p style={{ fontSize: '0.85rem', fontStyle: 'italic' }}>"{uploadResult.transcript}"</p>
-              </div>
-            )}
-
-            <div style={{ marginBottom: '8px' }}>
-              <p className="text-muted" style={{ fontSize: '0.72rem', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Reason
-              </p>
-              <p style={{ fontSize: '0.85rem' }}>{uploadResult.reason}</p>
-            </div>
-
-            <div>
-              <p className="text-muted" style={{ fontSize: '0.72rem', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Recommended Action
-              </p>
-              <p style={{ fontSize: '0.85rem', fontWeight: 500 }}>{uploadResult.recommended_action}</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Instructions when inactive */}
       {!active && (
         <div style={{ marginTop: '20px' }}>
           <div className="glass-card-static" style={{ marginBottom: '12px' }}>
-            <h4>🎙️ How it works</h4>
+            <h4>How it works</h4>
             <ol style={{ paddingLeft: '20px', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.8' }}>
-              <li>Tap <strong>ACTIVATE</strong> to start listening</li>
-              <li>Audio is transcribed and analyzed every 5 seconds</li>
-              <li>AI detects threats in real-time</li>
-              <li>Alarm sounds if danger is detected</li>
-              <li>Emergency contacts are alerted automatically</li>
+              <li>Tap ACTIVATE to start listening</li>
+              <li>Audio, transcript, and GPS stream to the backend</li>
+              <li>Keywords are fast path signals, and context still goes to the LLM</li>
+              <li>Emergency contacts are alerted after confirmation</li>
             </ol>
           </div>
 
@@ -687,7 +612,7 @@ export default function ShieldMode() {
           </div>
 
           <div className="glass-card-static">
-            <h4>📳 Shake Detection</h4>
+            <h4>Shake Detection</h4>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
               Motion detection is always active. If your phone is shaken violently,
               an emergency check will trigger automatically.

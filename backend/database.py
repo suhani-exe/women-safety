@@ -262,6 +262,10 @@ def create_safewalk(user_id: int, dest_name: str, dest_lat: float, dest_lng: flo
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
+        "UPDATE safe_walks SET status = 'superseded' WHERE user_id = %s AND status = 'active'",
+        (user_id,)
+    )
+    cur.execute(
         "INSERT INTO safe_walks (user_id, dest_name, dest_lat, dest_lng, eta) VALUES (%s, %s, %s, %s, %s) RETURNING *",
         (user_id, dest_name, dest_lat, dest_lng, eta)
     )
@@ -281,11 +285,66 @@ def get_active_safewalk(user_id: int):
     return dict(walk) if walk else None
 
 
-def end_safewalk(walk_id: int, user_id: int, status: str = "completed"):
+def get_overdue_safewalks(limit: int = 50):
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE safe_walks SET status = %s WHERE id = %s AND user_id = %s RETURNING *", (status, walk_id, user_id))
+    cur.execute(
+        """
+        SELECT *
+        FROM safe_walks
+        WHERE status = 'active'
+          AND eta IS NOT NULL
+          AND eta <= NOW()
+        ORDER BY eta ASC
+        LIMIT %s
+        """,
+        (limit,)
+    )
+    walks = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(w) for w in walks]
+
+
+def claim_overdue_safewalks(limit: int = 50):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE safe_walks
+        SET status = 'overdue_processing'
+        WHERE id IN (
+            SELECT id
+            FROM safe_walks
+            WHERE status = 'active'
+              AND eta IS NOT NULL
+              AND eta <= NOW()
+            ORDER BY eta ASC
+            LIMIT %s
+            FOR UPDATE SKIP LOCKED
+        )
+        RETURNING *
+        """,
+        (limit,)
+    )
+    walks = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(w) for w in walks]
+
+
+def update_safewalk_status(walk_id: int, user_id: int, status: str):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE safe_walks SET status = %s WHERE id = %s AND user_id = %s RETURNING *",
+        (status, walk_id, user_id)
+    )
     walk = cur.fetchone()
     cur.close()
     conn.close()
     return dict(walk) if walk else None
+
+
+def end_safewalk(walk_id: int, user_id: int, status: str = "completed"):
+    return update_safewalk_status(walk_id, user_id, status)
