@@ -104,6 +104,8 @@ export default function Dashboard() {
       <div className="page-abstract-bg dashboard" aria-hidden="true">
         <div className="orb orb-1" />
         <div className="orb orb-2" />
+        <div className="orb orb-3" />
+        <div className="dot-grid" />
       </div>
 
       <div className="page-content page-enter">

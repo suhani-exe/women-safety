@@ -100,6 +100,7 @@ export default function SafeWalk() {
     <>
       <div className="page-abstract-bg safewalk" aria-hidden="true">
         <div className="orb orb-1" />
+        <div className="orb orb-2" />
         <div className="orb orb-3" />
       </div>
     <div className="page-content page-enter">

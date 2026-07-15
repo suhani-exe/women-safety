@@ -183,97 +183,232 @@ h4 { font-size: 1.05rem; }
   overflow: hidden;
 }
 
-/* --- Dashboard: deep burgundy-rose with top-right pink glow --- */
+/* Noise grain texture overlay — premium editorial feel */
+.page-abstract-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+  opacity: 0.030;
+  pointer-events: none;
+  z-index: 10;
+  mix-blend-mode: overlay;
+}
+
+/* --- Dashboard: deep burgundy-rose — strong pink crown + bottom crimson --- */
 .page-abstract-bg.dashboard {
   background:
-    radial-gradient(ellipse 80% 60% at 85% 5%, rgba(236,168,214,0.18) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 10% 90%, rgba(140, 40, 80, 0.2) 0%, transparent 55%),
-    radial-gradient(ellipse 100% 80% at 50% 50%, transparent 40%, rgba(28,10,20,0.8) 100%),
+    radial-gradient(ellipse 90% 55% at 80% 0%,   rgba(236,168,214,0.42) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 55% at 8%  90%,  rgba(160, 30, 80, 0.38) 0%, transparent 52%),
+    radial-gradient(ellipse 55% 40% at 55% 55%,  rgba(236,168,214,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 110% 90% at 50% 50%, transparent 35%, rgba(12,4,10,0.88) 100%),
     linear-gradient(160deg, #1c0a14 0%, #14060f 50%, #1a0a10 100%);
 }
 
-/* --- Shield Mode: dark wine with red-pink burst --- */
+/* --- Shield Mode: near-black, blood-red aurora from center + scanlines --- */
 .page-abstract-bg.shield {
   background:
-    radial-gradient(ellipse 70% 50% at 50% 20%, rgba(239,68,68,0.12) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 50% 50%, rgba(236,168,214,0.08) 0%, transparent 55%),
-    linear-gradient(180deg, #180b0b 0%, #120608 60%, #1a0a0a 100%);
+    radial-gradient(ellipse 75% 55% at 50% 18%,  rgba(239, 60, 60, 0.30) 0%, transparent 58%),
+    radial-gradient(ellipse 50% 40% at 15% 75%,  rgba(200, 20, 40, 0.22) 0%, transparent 50%),
+    radial-gradient(ellipse 45% 35% at 88% 72%,  rgba(236,168,214,0.14) 0%, transparent 50%),
+    radial-gradient(ellipse 110% 90% at 50% 50%, transparent 30%, rgba(8,2,4,0.92) 100%),
+    linear-gradient(180deg, #160608 0%, #0e0404 55%, #1a0606 100%);
+}
+/* Scanline overlay on Shield */
+.page-abstract-bg.shield::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(239,68,68,0.028) 3px,
+    rgba(239,68,68,0.028) 4px
+  );
+  pointer-events: none;
+  z-index: 5;
 }
 
-/* --- MapView: deep slate-plum with subtle constellation --- */
+/* --- MapView: deep indigo-slate — constellation atmosphere --- */
 .page-abstract-bg.map {
   background:
-    radial-gradient(ellipse 90% 60% at 20% 30%, rgba(100, 50, 140, 0.15) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(236,168,214,0.10) 0%, transparent 50%),
-    linear-gradient(135deg, #0e0c1e 0%, #12091a 50%, #160a18 100%);
+    radial-gradient(ellipse 85% 60% at 18% 28%,  rgba(110, 55, 180, 0.35) 0%, transparent 55%),
+    radial-gradient(ellipse 65% 50% at 82% 75%,  rgba(236,168,214,0.22) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 40% at 60% 10%,  rgba(80, 40, 160, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 110% 90% at 50% 50%, transparent 35%, rgba(6,4,16,0.90) 100%),
+    linear-gradient(135deg, #08071a 0%, #0e0b1e 50%, #110a1c 100%);
+}
+/* Constellation dot grid for Map */
+.page-abstract-bg.map::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(160,120,240,0.55) 1px, transparent 1px),
+    radial-gradient(circle, rgba(236,168,214,0.35) 1px, transparent 1px);
+  background-size: 42px 42px, 84px 84px;
+  background-position: 0 0, 21px 21px;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 5;
 }
 
-/* --- Contacts: dark mauve with corner glow --- */
+/* --- Contacts: dark mauve — diagonal bloom from both corners --- */
 .page-abstract-bg.contacts {
   background:
-    radial-gradient(ellipse 50% 40% at 100% 0%, rgba(236,168,214,0.14) 0%, transparent 55%),
-    radial-gradient(ellipse 40% 30% at 0% 100%, rgba(160, 60, 110, 0.15) 0%, transparent 50%),
-    linear-gradient(145deg, #1e0e18 0%, #160a12 60%, #1c0c16 100%);
+    radial-gradient(ellipse 65% 50% at 100% 0%,   rgba(236,168,214,0.38) 0%, transparent 52%),
+    radial-gradient(ellipse 55% 42% at 0%   100%,  rgba(180, 50, 110, 0.32) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 35% at 50%   50%,  rgba(200,100,150,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 110% 90% at 50%  50%, transparent 38%, rgba(14,6,12,0.90) 100%),
+    linear-gradient(145deg, #1a0c16 0%, #130810 60%, #1c0c16 100%);
 }
 
-/* --- SafeWalk: deep forest-wine with sweep --- */
+/* --- SafeWalk: forest-wine — emerald top spotlight + pink sweep --- */
 .page-abstract-bg.safewalk {
   background:
-    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(16,185,129,0.06) 0%, transparent 50%),
-    radial-gradient(ellipse 50% 60% at 90% 80%, rgba(236,168,214,0.10) 0%, transparent 55%),
-    linear-gradient(170deg, #0f1209 0%, #120a0f 50%, #180e0e 100%);
+    radial-gradient(ellipse 70% 45% at 50% 0%,   rgba(16,185,129,0.22) 0%, transparent 50%),
+    radial-gradient(ellipse 55% 55% at 90% 80%,  rgba(236,168,214,0.28) 0%, transparent 52%),
+    radial-gradient(ellipse 45% 35% at 10% 30%,  rgba(10,120,80,0.18)  0%, transparent 50%),
+    radial-gradient(ellipse 110% 90% at 50% 50%, transparent 35%, rgba(6,10,8,0.92) 100%),
+    linear-gradient(170deg, #090e07 0%, #0e0a0c 50%, #120a0a 100%);
+}
+/* Radial spotlight ring for SafeWalk */
+.page-abstract-bg.safewalk::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 35% at 50% 50%,
+    rgba(16,185,129,0.07) 0%,
+    transparent 65%
+  );
+  animation: safewalkPulse 5s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 5;
+}
+@keyframes safewalkPulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.08); }
 }
 
-/* --- Hub: dark indigo-plum with scattered orbs --- */
+/* --- Hub: deep indigo-violet — mesh gradient atmosphere --- */
 .page-abstract-bg.hub {
   background:
-    radial-gradient(ellipse 60% 40% at 30% 20%, rgba(130, 80, 200, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 35% at 70% 80%, rgba(236,168,214,0.12) 0%, transparent 50%),
-    linear-gradient(155deg, #0e0c1e 0%, #140b1c 50%, #1a0d1e 100%);
+    radial-gradient(ellipse 75% 50% at 28% 18%,  rgba(140, 80, 220, 0.30) 0%, transparent 52%),
+    radial-gradient(ellipse 55% 45% at 72% 78%,  rgba(236,168,214,0.28) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 40% at 80% 15%,  rgba(100, 60, 180, 0.18) 0%, transparent 52%),
+    radial-gradient(ellipse 50% 40% at 15% 80%,  rgba(180, 80, 140, 0.18) 0%, transparent 50%),
+    radial-gradient(ellipse 110% 90% at 50% 50%, transparent 35%, rgba(6,4,14,0.92) 100%),
+    linear-gradient(155deg, #08071a 0%, #100c1e 50%, #160d1e 100%);
 }
 
-/* Floating orb blobs — reusable animated accent circles */
+/* ─── AURORA ORBS — Bigger, more saturated, gently hue-shifting ─── */
 .orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(60px);
+  filter: blur(90px);
   pointer-events: none;
-  animation: orbDrift 8s ease-in-out infinite alternate;
-}
-.orb-1 {
-  width: 320px; height: 280px;
-  background: radial-gradient(circle, rgba(236,168,214,0.18) 0%, transparent 70%);
-  top: -80px; right: -60px;
-  animation-duration: 9s;
-}
-.orb-2 {
-  width: 250px; height: 220px;
-  background: radial-gradient(circle, rgba(140,40,80,0.22) 0%, transparent 70%);
-  bottom: 80px; left: -80px;
-  animation-duration: 11s;
-  animation-delay: -4s;
-}
-.orb-3 {
-  width: 180px; height: 160px;
-  background: radial-gradient(circle, rgba(236,168,214,0.12) 0%, transparent 70%);
-  top: 40%; right: 10%;
-  animation-duration: 13s;
-  animation-delay: -7s;
-}
-@keyframes orbDrift {
-  0%   { transform: translate(0, 0) scale(1); }
-  33%  { transform: translate(30px, -20px) scale(1.05); }
-  66%  { transform: translate(-15px, 25px) scale(0.97); }
-  100% { transform: translate(20px, 10px) scale(1.02); }
+  animation: orbDrift 10s ease-in-out infinite alternate;
+  will-change: transform;
 }
 
-/* Dot grid overlay */
+/* orb-1 — Top-right, large pink/violet */
+.orb-1 {
+  width: 480px; height: 380px;
+  background: radial-gradient(circle at 40% 40%,
+    rgba(236,168,214,0.55) 0%,
+    rgba(160,80,200,0.30) 45%,
+    transparent 70%
+  );
+  top: -120px; right: -80px;
+  animation-duration: 10s;
+}
+
+/* orb-2 — Bottom-left, deep crimson-pink */
+.orb-2 {
+  width: 380px; height: 320px;
+  background: radial-gradient(circle at 55% 55%,
+    rgba(180, 30, 90, 0.50) 0%,
+    rgba(120, 20, 60, 0.30) 45%,
+    transparent 70%
+  );
+  bottom: 60px; left: -100px;
+  animation-duration: 13s;
+  animation-delay: -5s;
+}
+
+/* orb-3 — Mid, soft accent shimmer */
+.orb-3 {
+  width: 280px; height: 240px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(236,168,214,0.28) 0%,
+    rgba(200,100,160,0.16) 50%,
+    transparent 70%
+  );
+  top: 38%; right: 8%;
+  animation-duration: 15s;
+  animation-delay: -8s;
+}
+
+/* Hub/Map special: violet orb override */
+.page-abstract-bg.hub .orb-1,
+.page-abstract-bg.map .orb-1 {
+  background: radial-gradient(circle at 40% 40%,
+    rgba(160,100,255,0.50) 0%,
+    rgba(100,60,200,0.28) 45%,
+    transparent 70%
+  );
+}
+.page-abstract-bg.hub .orb-2,
+.page-abstract-bg.map .orb-2 {
+  background: radial-gradient(circle at 55% 55%,
+    rgba(236,168,214,0.42) 0%,
+    rgba(160,60,120,0.25) 48%,
+    transparent 70%
+  );
+}
+
+/* Shield orb override — red/crimson */
+.page-abstract-bg.shield .orb-1 {
+  background: radial-gradient(circle at 40% 40%,
+    rgba(239, 80, 80, 0.50) 0%,
+    rgba(180, 20, 40, 0.30) 45%,
+    transparent 70%
+  );
+  top: -60px; left: 50%; transform: translateX(-50%);
+}
+.page-abstract-bg.shield .orb-2 {
+  background: radial-gradient(circle at 55% 55%,
+    rgba(180, 20, 50, 0.42) 0%,
+    rgba(236,168,214,0.15) 50%,
+    transparent 70%
+  );
+}
+
+/* SafeWalk orb override — emerald */
+.page-abstract-bg.safewalk .orb-1 {
+  background: radial-gradient(circle at 40% 40%,
+    rgba(16,185,129,0.40) 0%,
+    rgba(10,120,80,0.22) 48%,
+    transparent 70%
+  );
+}
+
+@keyframes orbDrift {
+  0%   { transform: translate(0, 0) scale(1); }
+  25%  { transform: translate(28px, -22px) scale(1.06); }
+  50%  { transform: translate(-18px, 20px) scale(0.96); }
+  75%  { transform: translate(22px, 14px) scale(1.03); }
+  100% { transform: translate(-8px, -12px) scale(1.01); }
+}
+
+/* Dot grid overlay — tighter, more visible */
 .dot-grid {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle, rgba(236,168,214,0.12) 1px, transparent 1px);
-  background-size: 36px 36px;
-  opacity: 0.4;
+  background-image: radial-gradient(circle, rgba(236,168,214,0.22) 1px, transparent 1px);
+  background-size: 26px 26px;
+  opacity: 0.65;
   pointer-events: none;
 }
 
@@ -1076,53 +1211,79 @@ h4 { font-size: 1.05rem; }
   text-align: center;
   position: relative;
   overflow: hidden;
-  /* Abstract purple-to-rose gradient — not flat black */
+  /* Deep magenta-violet space — much more intense */
   background:
-    radial-gradient(ellipse 100% 70% at 50% -10%, rgba(140, 60, 200, 0.25) 0%, transparent 55%),
-    radial-gradient(ellipse 80% 60% at 90% 80%, rgba(236, 168, 214, 0.18) 0%, transparent 50%),
-    radial-gradient(ellipse 60% 50% at 10% 70%, rgba(100, 20, 80, 0.25) 0%, transparent 55%),
-    radial-gradient(ellipse 70% 40% at 50% 50%, rgba(60, 10, 50, 0.4) 0%, transparent 70%),
-    linear-gradient(160deg, #0e0812 0%, #160a1e 25%, #1a0a18 50%, #120810 75%, #0e0810 100%);
+    radial-gradient(ellipse 110% 65% at 50% -5%,  rgba(160, 60, 220, 0.45) 0%, transparent 52%),
+    radial-gradient(ellipse 80%  70% at 92%  80%,  rgba(236,168,214,0.38) 0%, transparent 50%),
+    radial-gradient(ellipse 65%  55% at 8%   70%,  rgba(140, 20, 90, 0.38) 0%, transparent 52%),
+    radial-gradient(ellipse 60%  45% at 50%  55%,  rgba(80, 10, 60, 0.35)  0%, transparent 65%),
+    radial-gradient(ellipse 120% 90% at 50%  50%,  transparent 30%, rgba(8,4,12,0.88) 100%),
+    linear-gradient(160deg, #0a0612 0%, #12091a 22%, #180c1e 48%, #100810 72%, #0c0610 100%);
 }
 
-/* Dot-grid overlay */
+/* Dot-grid overlay — tighter and brighter */
 .landing-page::before {
   content: '';
   position: fixed;
   inset: 0;
-  background-image: radial-gradient(circle, rgba(236,168,214,0.14) 1px, transparent 1px);
-  background-size: 32px 32px;
-  opacity: 0.45;
+  background-image: radial-gradient(circle, rgba(236,168,214,0.22) 1px, transparent 1px);
+  background-size: 26px 26px;
+  opacity: 0.55;
   pointer-events: none;
   z-index: 0;
 }
 
-/* Floating orbs */
+/* Noise grain */
+.landing-page::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+  opacity: 0.028;
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: overlay;
+}
+
+/* Floating orbs — bigger, more saturated */
 .landing-orb {
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
   z-index: 0;
-  filter: blur(70px);
+  filter: blur(90px);
+  will-change: transform;
 }
 .landing-orb-1 {
-  width: 380px; height: 280px;
-  top: -80px; right: -60px;
-  background: radial-gradient(circle, rgba(140,60,200,0.25) 0%, rgba(236,168,214,0.12) 50%, transparent 70%);
-  animation: orbDrift 10s ease-in-out infinite alternate;
+  width: 520px; height: 380px;
+  top: -120px; right: -80px;
+  background: radial-gradient(circle at 40% 40%,
+    rgba(180, 80, 240, 0.55) 0%,
+    rgba(236,168,214,0.30) 45%,
+    transparent 70%
+  );
+  animation: orbDrift 11s ease-in-out infinite alternate;
 }
 .landing-orb-2 {
-  width: 300px; height: 260px;
-  bottom: 60px; left: -80px;
-  background: radial-gradient(circle, rgba(180,40,120,0.22) 0%, transparent 70%);
-  animation: orbDrift 13s ease-in-out infinite alternate-reverse;
+  width: 420px; height: 340px;
+  bottom: 40px; left: -100px;
+  background: radial-gradient(circle at 55% 55%,
+    rgba(200, 40, 130, 0.50) 0%,
+    rgba(140, 20, 80, 0.30) 45%,
+    transparent 70%
+  );
+  animation: orbDrift 14s ease-in-out infinite alternate-reverse;
 }
 .landing-orb-3 {
-  width: 220px; height: 200px;
-  top: 40%; left: 40%;
-  background: radial-gradient(circle, rgba(236,168,214,0.10) 0%, transparent 70%);
-  animation: orbDrift 8s ease-in-out infinite alternate;
-  animation-delay: -3s;
+  width: 300px; height: 260px;
+  top: 42%; left: 35%;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(236,168,214,0.25) 0%,
+    rgba(200,100,180,0.15) 50%,
+    transparent 70%
+  );
+  animation: orbDrift 9s ease-in-out infinite alternate;
+  animation-delay: -4s;
 }
 
 .landing-inner {

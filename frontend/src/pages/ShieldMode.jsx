@@ -441,6 +441,7 @@ export default function ShieldMode() {
       <div className="page-abstract-bg shield" aria-hidden="true">
         <div className="orb orb-1" />
         <div className="orb orb-2" />
+        <div className="orb orb-3" />
       </div>
     <div className="page-content page-enter shield-page">
       {/* Page Header */}
