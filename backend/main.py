@@ -150,10 +150,6 @@ class SafeWalkRequest(BaseModel):
     eta_minutes: int  # how many minutes until expected arrival
 
 
-# ============================================
-# Auth Routes
-# ============================================
-
 @app.post("/api/register")
 def register(req: RegisterRequest):
     """Create a new user account."""
@@ -213,10 +209,6 @@ def update_profile(req: UpdateProfileRequest, user_id: int = Depends(get_current
     return {"user": user}
 
 
-# ============================================
-# Emergency Contacts Routes
-# ============================================
-
 @app.get("/api/contacts")
 def list_contacts(user_id: int = Depends(get_current_user_id)):
     """Get all emergency contacts for current user."""
@@ -239,10 +231,6 @@ def remove_contact(contact_id: int, user_id: int = Depends(get_current_user_id))
         raise HTTPException(status_code=404, detail="Contact not found")
     return {"message": "Contact deleted"}
 
-
-# ============================================
-# Shield Mode — Audio Analysis Routes
-# ============================================
 
 @app.post("/api/audio/analyze")
 def analyze_audio_transcript(req: TranscriptRequest, user_id: int = Depends(get_current_user_id)):
@@ -312,9 +300,6 @@ def get_audio_history(user_id: int = Depends(get_current_user_id)):
     return {"incidents": incidents_list}
 
 
-# ============================================
-# Emergency Protocol Routes
-# ============================================
 
 @app.post("/api/emergency/trigger")
 def trigger_emergency(req: EmergencyRequest, user_id: int = Depends(get_current_user_id)):
@@ -349,9 +334,6 @@ def trigger_emergency(req: EmergencyRequest, user_id: int = Depends(get_current_
         f"Please call them or emergency services immediately!"
     )
 
-    # -------------------------------------------------------
-    # ALWAYS send SMS to every emergency contact via Twilio
-    # -------------------------------------------------------
     sms_results = []
     for contact in contacts:
         result = send_sms(contact["phone"], sos_message)
@@ -422,10 +404,6 @@ def resolve_emergency(incident_id: int, user_id: int = Depends(get_current_user_
     return {"incident": incident}
 
 
-# ============================================
-# Location Routes
-# ============================================
-
 @app.post("/api/location/police")
 def find_nearest_police(req: LocationUpdate):
     """Find nearest police stations using OpenStreetMap Overpass API."""
@@ -479,10 +457,6 @@ def find_nearest_police(req: LocationUpdate):
         return {"stations": [], "error": f"Could not fetch police stations: {str(e)[:100]}"}
 
 
-# ============================================
-# Community Safety Reports Routes
-# ============================================
-
 @app.post("/api/reports")
 def submit_report(req: ReportRequest, user_id: int = Depends(get_current_user_id)):
     """Submit an anonymous safety report for the heatmap."""
@@ -495,11 +469,6 @@ def get_heatmap():
     """Get all safety reports for the heatmap overlay (public endpoint)."""
     reports = get_heatmap_data()
     return {"reports": reports}
-
-
-# ============================================
-# SafeWalk Routes
-# ============================================
 
 @app.post("/api/safewalk/start")
 def start_safewalk(req: SafeWalkRequest, user_id: int = Depends(get_current_user_id)):
@@ -526,9 +495,6 @@ def complete_safewalk(walk_id: int, user_id: int = Depends(get_current_user_id))
     return {"safewalk": walk, "message": "Glad you reached safely! 🎉"}
 
 
-# ============================================
-# Health Check
-# ============================================
 
 @app.get("/api/health")
 def health_check():
