@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth, useToast } from '../App'
 
-// Animated cycling words (adapted from COMPUTE hero spec)
+// Animated cycling words
 const WORDS = ['protecting', 'watching', 'alerting', 'guarding']
 
 function AnimatedWord({ word }) {
@@ -10,10 +10,7 @@ function AnimatedWord({ word }) {
 
   useEffect(() => {
     const chars = word.split('')
-    // Immediately mark all as entering
     setLetters(chars.map(ch => ({ ch, state: 'entering' })))
-
-    // Stagger each letter in
     const timers = chars.map((ch, i) =>
       setTimeout(() => {
         setLetters(prev =>
@@ -51,7 +48,6 @@ export default function Landing() {
 
   // Animated word cycling
   const [wordIndex, setWordIndex] = useState(0)
-  const wordRef = useRef(null)
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -90,6 +86,11 @@ export default function Landing() {
 
   return (
     <main className="landing-page">
+      {/* Animated floating orbs */}
+      <div className="landing-orb landing-orb-1" aria-hidden="true" />
+      <div className="landing-orb landing-orb-2" aria-hidden="true" />
+      <div className="landing-orb landing-orb-3" aria-hidden="true" />
+
       <div className="landing-inner">
         {/* Eyebrow */}
         <span className="landing-eyebrow">
@@ -118,7 +119,7 @@ export default function Landing() {
           <span className="landing-feature-tag">Instant SOS</span>
         </div>
 
-        {/* Auth card */}
+        {/* Auth card — glassmorphism */}
         <div className="auth-card">
           {/* Toggle */}
           <div className="auth-toggle" role="group" aria-label="Auth mode">
@@ -209,7 +210,7 @@ export default function Landing() {
             <button
               id="auth-submit-btn"
               type="submit"
-              className="btn btn-primary btn-full btn-lg"
+              className="btn btn-primary btn-full btn-lg btn-glow-pulse"
               disabled={loading}
             >
               {loading

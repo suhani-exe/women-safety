@@ -97,6 +97,11 @@ export default function SafeWalk() {
   }
 
   return (
+    <>
+      <div className="page-abstract-bg safewalk" aria-hidden="true">
+        <div className="orb orb-1" />
+        <div className="orb orb-3" />
+      </div>
     <div className="page-content page-enter">
       {/* Page Header */}
       <div className="page-header">
@@ -209,5 +214,6 @@ export default function SafeWalk() {
         </div>
       )}
     </div>
+    </>
   )
 }

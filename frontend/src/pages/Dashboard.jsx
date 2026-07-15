@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth, useEmergency } from '../App'
 
-/* Inline SVG icons */
+/* ── Inline SVG icons ───────────────────────────────── */
 const ShieldIcon = () => (
   <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 2l7 4v5c0 4.97-3.13 9.28-7 11-3.87-1.72-7-6.03-7-11V6l7-4z" />
@@ -36,12 +36,39 @@ const LogoutIcon = () => (
   </svg>
 )
 
+/* ── Scroll reveal hook ─────────────────────────────── */
+function useScrollReveal() {
+  const refs = useRef([])
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible')
+          }
+        })
+      },
+      { threshold: 0.1, rootMargin: '0px 0px -30px 0px' }
+    )
+    refs.current.forEach(el => { if (el) observer.observe(el) })
+    return () => observer.disconnect()
+  }, [])
+  const addRef = (el) => {
+    if (el && !refs.current.includes(el)) refs.current.push(el)
+  }
+  return addRef
+}
+
+
+
+/* ── Dashboard ───────────────────────────────────────── */
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const { triggerEmergency } = useEmergency()
   const navigate = useNavigate()
   const [incidents, setIncidents] = useState([])
   const [shieldActive] = useState(false)
+  const addRef = useScrollReveal()
 
   useEffect(() => {
     loadIncidents()
@@ -72,115 +99,123 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="page-content page-enter">
-      {/* Header */}
-      <header className="dashboard-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <p className="greeting eyebrow" style={{ marginBottom: '6px' }}>
-              {getGreeting()}
-            </p>
-            <h1>{user?.name?.split(' ')[0]}</h1>
-          </div>
-          <button
-            className="btn btn-ghost btn-sm btn-icon"
-            onClick={logout}
-            title="Log out"
-            aria-label="Log out"
-          >
-            <LogoutIcon />
-          </button>
-        </div>
-
-        <div className={`status-badge ${shieldActive ? 'active-status' : 'safe'}`}>
-          <span className="status-dot" aria-hidden="true" />
-          {shieldActive ? 'Shield Active' : 'All Clear'}
-        </div>
-      </header>
-
-      {/* Shield Button */}
-      <div className="shield-btn-container">
-        <button
-          className={`shield-btn ${shieldActive ? 'active' : ''}`}
-          onClick={() => navigate('/shield')}
-          aria-label="Open Shield Mode"
-        >
-          <ShieldIcon />
-          <span style={{ marginTop: '4px' }}>{shieldActive ? 'ACTIVE' : 'SHIELD'}</span>
-        </button>
+    <>
+      {/* Abstract background */}
+      <div className="page-abstract-bg dashboard" aria-hidden="true">
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
       </div>
 
-      <p className="text-secondary" style={{ textAlign: 'center', marginBottom: '28px', fontSize: '0.82rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>
-        Tap to activate AI-powered protection
-      </p>
+      <div className="page-content page-enter">
+        {/* Header */}
+        <header className="dashboard-header reveal" ref={addRef}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <p className="greeting eyebrow" style={{ marginBottom: '6px' }}>
+                {getGreeting()}
+              </p>
+              <h1>{user?.name?.split(' ')[0]}</h1>
+            </div>
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              onClick={logout}
+              title="Log out"
+              aria-label="Log out"
+            >
+              <LogoutIcon />
+            </button>
+          </div>
 
-      {/* Quick Actions */}
-      <section aria-label="Quick actions">
-        <div className="quick-actions">
-          <Link to="/shield" className="action-card" id="action-shield">
-            <span className="action-icon"><ShieldIcon /></span>
-            <span className="action-title">Shield Mode</span>
-            <span className="action-desc">AI audio monitoring</span>
-          </Link>
+          <div className={`status-badge ${shieldActive ? 'active-status' : 'safe'}`}>
+            <span className="status-dot" aria-hidden="true" />
+            {shieldActive ? 'Shield Active' : 'All Clear'}
+          </div>
+        </header>
 
-          <Link to="/map" className="action-card" id="action-map">
-            <span className="action-icon"><MapIcon /></span>
-            <span className="action-title">Safety Map</span>
-            <span className="action-desc">Nearby safe zones</span>
-          </Link>
-
-          <Link to="/safewalk" className="action-card" id="action-safewalk">
-            <span className="action-icon"><WalkIcon /></span>
-            <span className="action-title">SafeWalk</span>
-            <span className="action-desc">Virtual companion</span>
-          </Link>
-
+        {/* Shield Button */}
+        <div className="shield-btn-container reveal reveal-delay-1" ref={addRef}>
           <button
-            id="action-sos"
-            className="action-card"
-            onClick={() => triggerEmergency('manual')}
-            style={{ border: '1px solid var(--red-border)' }}
-            aria-label="Trigger SOS emergency alert"
+            className={`shield-btn ${shieldActive ? 'active' : ''}`}
+            onClick={() => navigate('/shield')}
+            aria-label="Open Shield Mode"
           >
-            <span className="action-icon" style={{ color: 'var(--red-light)' }}><AlertIcon /></span>
-            <span className="action-title" style={{ color: 'var(--red-light)' }}>SOS</span>
-            <span className="action-desc">Emergency alert</span>
+            <ShieldIcon />
+            <span style={{ marginTop: '4px' }}>{shieldActive ? 'ACTIVE' : 'SHIELD'}</span>
           </button>
         </div>
-      </section>
 
-      {/* Recent Activity */}
-      <section className="recent-section" aria-label="Recent activity">
-        <span className="eyebrow" style={{ marginBottom: '14px', display: 'block' }}>
-          Recent Activity
-        </span>
+        <p className="text-secondary reveal reveal-delay-2" ref={addRef}
+          style={{ textAlign: 'center', marginBottom: '28px', fontSize: '0.82rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>
+          Tap to activate AI-powered protection
+        </p>
 
-        {incidents.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon" aria-hidden="true">✦</div>
-            <p>No incidents — you&apos;re safe!</p>
+        {/* Quick Actions */}
+        <section aria-label="Quick actions">
+          <div className="quick-actions">
+            {[
+              { to: '/shield',   icon: <ShieldIcon />, title: 'Shield Mode', desc: 'AI audio monitoring',  id: 'action-shield', delay: 'reveal-delay-1' },
+              { to: '/map',      icon: <MapIcon />,    title: 'Safety Map',  desc: 'Nearby safe zones',   id: 'action-map',    delay: 'reveal-delay-2' },
+              { to: '/safewalk', icon: <WalkIcon />,   title: 'SafeWalk',    desc: 'Virtual companion',   id: 'action-safewalk',delay: 'reveal-delay-3'},
+            ].map(({ to, icon, title, desc, id, delay }) => (
+              <Link key={to} to={to} className={`action-card reveal ${delay}`} id={id} ref={addRef}>
+                <span className="action-icon">{icon}</span>
+                <span className="action-title">{title}</span>
+                <span className="action-desc">{desc}</span>
+              </Link>
+            ))}
+
+            <button
+              id="action-sos"
+              className="action-card reveal reveal-delay-4"
+              ref={addRef}
+              onClick={() => triggerEmergency('manual')}
+              style={{ border: '1px solid var(--red-border)' }}
+              aria-label="Trigger SOS emergency alert"
+            >
+              <span className="action-icon" style={{ color: 'var(--red-light)' }}><AlertIcon /></span>
+              <span className="action-title" style={{ color: 'var(--red-light)' }}>SOS</span>
+              <span className="action-desc">Emergency alert</span>
+            </button>
           </div>
-        ) : (
-          incidents.slice(0, 5).map((incident) => (
-            <div key={incident.id} className="incident-item">
-              <div className="incident-icon" aria-hidden="true">
-                {incident.type === 'audio' ? '🎙' : incident.type === 'shake' ? '📳' : '🚨'}
-              </div>
-              <div className="incident-info">
-                <div className="incident-type">
-                  {incident.type === 'audio' ? 'Audio Alert'
-                   : incident.type === 'shake' ? 'Motion Alert'
-                   : 'Manual SOS'}
-                </div>
-                <div className="incident-time">{formatTime(incident.created_at)}</div>
-              </div>
-              <span className={`incident-level ${incident.threat_level?.toLowerCase()}`}>
-                {incident.threat_level}
-              </span>
+        </section>
+
+        {/* Recent Activity */}
+        <section className="recent-section" aria-label="Recent activity">
+          <span className="eyebrow reveal reveal-delay-1" ref={addRef} style={{ marginBottom: '14px', display: 'block' }}>
+            Recent Activity
+          </span>
+
+          {incidents.length === 0 ? (
+            <div className="empty-state reveal reveal-delay-2" ref={addRef}>
+              <div className="empty-icon" aria-hidden="true">✦</div>
+              <p>No incidents — you&apos;re safe!</p>
             </div>
-          ))
-        )}
-      </section>
-    </div>
+          ) : (
+            incidents.slice(0, 5).map((incident, idx) => (
+              <div
+                key={incident.id}
+                className={`incident-item reveal reveal-delay-${Math.min(idx + 1, 6)}`}
+                ref={addRef}
+              >
+                <div className="incident-icon" aria-hidden="true">
+                  {incident.type === 'audio' ? '🎙' : incident.type === 'shake' ? '📳' : '🚨'}
+                </div>
+                <div className="incident-info">
+                  <div className="incident-type">
+                    {incident.type === 'audio' ? 'Audio Alert'
+                     : incident.type === 'shake' ? 'Motion Alert'
+                     : 'Manual SOS'}
+                  </div>
+                  <div className="incident-time">{formatTime(incident.created_at)}</div>
+                </div>
+                <span className={`incident-level ${incident.threat_level?.toLowerCase()}`}>
+                  {incident.threat_level}
+                </span>
+              </div>
+            ))
+          )}
+        </section>
+      </div>
+    </>
   )
 }

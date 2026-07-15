@@ -105,6 +105,11 @@ export default function MapView() {
   }
 
   return (
+    <>
+      <div className="page-abstract-bg map" aria-hidden="true">
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
+      </div>
     <div className="page-content page-enter">
       {/* Page Header */}
       <div className="page-header">
@@ -194,5 +199,6 @@ export default function MapView() {
         </div>
       )}
     </div>
+    </>
   )
 }

@@ -437,6 +437,11 @@ export default function ShieldMode() {
   }, [triggerEmergency])
 
   return (
+    <>
+      <div className="page-abstract-bg shield" aria-hidden="true">
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+      </div>
     <div className="page-content page-enter shield-page">
       {/* Page Header */}
       <div className="page-header">
@@ -643,5 +648,6 @@ export default function ShieldMode() {
         </div>
       )}
     </div>
+    </>
   )
 }

@@ -1,4 +1,18 @@
+import { useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+
+function useScrollReveal() {
+  const refs = useRef([])
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') }),
+      { threshold: 0.08, rootMargin: '0px 0px -20px 0px' }
+    )
+    refs.current.forEach(el => { if (el) observer.observe(el) })
+    return () => observer.disconnect()
+  }, [])
+  return (el) => { if (el && !refs.current.includes(el)) refs.current.push(el) }
+}
 
 const BackIcon = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -42,8 +56,15 @@ const categories = [
 
 export default function Hub() {
   const navigate = useNavigate()
+  const addRef = useScrollReveal()
 
   return (
+    <>
+      <div className="page-abstract-bg hub" aria-hidden="true">
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
+      </div>
     <div className="page-content page-enter">
       {/* Page Header */}
       <div className="page-header">
@@ -73,7 +94,8 @@ export default function Hub() {
               href={item.link}
               target={item.link.startsWith('tel:') ? '_self' : '_blank'}
               rel="noopener noreferrer"
-              className="resource-card"
+              className={`resource-card reveal reveal-delay-${Math.min(i + 1, 6)}`}
+              ref={addRef}
               aria-label={`${item.title} — ${item.desc}`}
             >
               <span className="resource-icon" aria-hidden="true">{item.icon}</span>
@@ -86,5 +108,6 @@ export default function Hub() {
         </section>
       ))}
     </div>
+    </>
   )
 }

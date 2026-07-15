@@ -1,6 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch, useToast } from '../App'
+
+function useScrollReveal() {
+  const refs = useRef([])
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') }),
+      { threshold: 0.1, rootMargin: '0px 0px -20px 0px' }
+    )
+    refs.current.forEach(el => { if (el) observer.observe(el) })
+    return () => observer.disconnect()
+  }, [])
+  return (el) => { if (el && !refs.current.includes(el)) refs.current.push(el) }
+}
 
 const BackIcon = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -70,7 +83,14 @@ export default function Contacts() {
   const getInitials = (name) =>
     name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 
+  const addRef = useScrollReveal()
+
   return (
+    <>
+      <div className="page-abstract-bg contacts" aria-hidden="true">
+        <div className="orb orb-1" />
+        <div className="orb orb-3" />
+      </div>
     <div className="page-content page-enter">
       {/* Page Header */}
       <div className="page-header">
@@ -137,8 +157,8 @@ export default function Contacts() {
             </p>
           </div>
         ) : (
-          contacts.map((contact) => (
-            <div key={contact.id} className="contact-card slide-up">
+          contacts.map((contact, idx) => (
+            <div key={contact.id} className={`contact-card reveal reveal-delay-${Math.min(idx+1,6)}`} ref={addRef}>
               <div className="contact-avatar" aria-hidden="true">
                 {getInitials(contact.name)}
               </div>
@@ -162,7 +182,7 @@ export default function Contacts() {
       </div>
 
       {/* Default Emergency Numbers */}
-      <div className="glass-card-static" style={{ marginTop: '24px' }}>
+      <div className="glass-card-static reveal" ref={addRef} style={{ marginTop: '24px' }}>
         <span className="eyebrow" style={{ display: 'block', marginBottom: '12px' }}>Default Emergency Numbers</span>
         <div style={{ color: 'var(--muted-foreground)', fontSize: '0.83rem', lineHeight: '2', fontFamily: 'var(--font-sans)' }}>
           <div>Police &mdash; <strong style={{ color: 'var(--foreground)', fontFamily: 'var(--font-mono)' }}>100</strong></div>
@@ -171,5 +191,6 @@ export default function Contacts() {
         </div>
       </div>
     </div>
+    </>
   )
 }
