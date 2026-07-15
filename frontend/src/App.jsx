@@ -142,11 +142,14 @@ function App() {
 
   if (loading) {
     return (
-      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="landing-logo">🛡️</div>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'oklch(0.06 0.008 260)' }}>
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#eca8d6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 2s linear infinite', opacity: 0.8 }}>
+          <path d="M12 2l7 4v5c0 4.97-3.13 9.28-7 11-3.87-1.72-7-6.03-7-11V6l7-4z" />
+        </svg>
       </div>
     )
   }
+
 
   const showNavbar = user && location.pathname !== '/'
 

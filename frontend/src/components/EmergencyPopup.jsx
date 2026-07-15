@@ -136,39 +136,39 @@ export default function EmergencyPopup({ type, onOk }) {
     }
   }
 
-  // Emergency triggered - show contact list
+  // Emergency triggered — show contact list
   if (triggered && emergencyData) {
-    // Build a map of sms_results by phone for quick lookup
     const smsMap = {}
     for (const r of (emergencyData.sms_results || [])) {
       smsMap[r.phone] = r
     }
 
     return (
-      <div className="emergency-overlay">
+      <div className="emergency-overlay" role="dialog" aria-modal="true" aria-label="Emergency activated">
         <div className="emergency-modal" style={{ maxWidth: '420px' }}>
-          <div className="emergency-icon">🚨</div>
+          <div className="emergency-icon" aria-hidden="true">🚨</div>
           <h2>Emergency Activated</h2>
-          <p className="text-secondary" style={{ marginBottom: '20px' }}>
+          <p style={{ color: 'var(--muted-foreground)', marginBottom: '20px', fontSize: '0.88rem' }}>
             Alerting your contacts and emergency services
           </p>
 
           {/* Emergency Numbers */}
           <div style={{ marginBottom: '16px' }}>
-            <h4 style={{ marginBottom: '8px', textAlign: 'left' }}>🚔 Emergency Services</h4>
+            <span className="eyebrow" style={{ display: 'block', marginBottom: '10px', textAlign: 'left' }}>Emergency Services</span>
             {emergencyData.emergency_numbers?.map((num, i) => (
               <a
                 key={i}
                 href={num.tel_link}
                 className="emergency-contact-card"
                 style={{ textDecoration: 'none', color: 'inherit' }}
+                aria-label={`Call ${num.name} at ${num.phone}`}
               >
                 <div className="contact-info">
                   <div className="contact-name">{num.name}</div>
                   <div className="contact-phone">{num.phone}</div>
                 </div>
                 <div className="contact-actions">
-                  <span className="call-btn">📞</span>
+                  <span className="call-btn" aria-hidden="true">📞</span>
                 </div>
               </a>
             ))}
@@ -177,7 +177,7 @@ export default function EmergencyPopup({ type, onOk }) {
           {/* Personal Contacts */}
           {emergencyData.contacts?.length > 0 && (
             <div style={{ marginBottom: '16px' }}>
-              <h4 style={{ marginBottom: '8px', textAlign: 'left' }}>👥 Your Contacts</h4>
+              <span className="eyebrow" style={{ display: 'block', marginBottom: '10px', textAlign: 'left' }}>Your Contacts</span>
               {emergencyData.contacts.map((contact, i) => {
                 const sms = smsMap[contact.phone]
                 return (
@@ -185,16 +185,15 @@ export default function EmergencyPopup({ type, onOk }) {
                     <div className="contact-info">
                       <div className="contact-name">{contact.name}</div>
                       <div className="contact-phone">{contact.phone}</div>
-                      {/* SMS delivery status */}
                       {sms && (
-                        <div style={{ fontSize: '0.72rem', marginTop: '2px', color: sms.sms_sent ? '#10B981' : '#F59E0B' }}>
-                          {sms.sms_sent ? '✅ SMS delivered' : `⚠️ SMS failed — ${sms.sms_error || 'configure Twilio'}`}
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', marginTop: '3px', color: sms.sms_sent ? 'var(--emerald)' : 'var(--amber)' }}>
+                          {sms.sms_sent ? 'SMS delivered' : `SMS failed — ${sms.sms_error || 'configure Twilio'}`}
                         </div>
                       )}
                     </div>
                     <div className="contact-actions">
-                      <a href={contact.tel_link} className="call-btn" title="Call">📞</a>
-                      <a href={contact.whatsapp_link} target="_blank" rel="noopener" className="whatsapp-btn" title="WhatsApp">💬</a>
+                      <a href={contact.tel_link} className="call-btn" title="Call" aria-label={`Call ${contact.name}`}>📞</a>
+                      <a href={contact.whatsapp_link} target="_blank" rel="noopener" className="whatsapp-btn" title="WhatsApp" aria-label={`WhatsApp ${contact.name}`}>💬</a>
                     </div>
                   </div>
                 )
@@ -203,15 +202,15 @@ export default function EmergencyPopup({ type, onOk }) {
           )}
 
           {emergencyData.contacts?.length === 0 && (
-            <div className="glass-card-static" style={{ marginBottom: '16px', padding: '10px 16px' }}>
-              <p style={{ fontSize: '0.82rem', color: '#F59E0B' }}>
-                ⚠️ No emergency contacts saved. Go to Contacts to add them.
+            <div className="glass-card-static" style={{ marginBottom: '14px', padding: '10px 14px' }}>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--amber)', letterSpacing: '0.03em' }}>
+                No emergency contacts saved. Go to Contacts to add them.
               </p>
             </div>
           )}
 
-          <button className="btn btn-safe btn-full" onClick={onOk} style={{ marginTop: '12px' }}>
-            ✅ I'm Safe Now — Cancel Emergency
+          <button id="emergency-safe-btn" className="btn btn-safe btn-full" onClick={onOk} style={{ marginTop: '12px' }}>
+            I&apos;m Safe Now &mdash; Cancel Emergency
           </button>
         </div>
       </div>
@@ -222,40 +221,42 @@ export default function EmergencyPopup({ type, onOk }) {
   const progress = (countdown / 15) * 100
 
   return (
-    <div className="emergency-overlay">
+    <div className="emergency-overlay" role="dialog" aria-modal="true" aria-label="Safety check">
       <div className="emergency-modal">
-        <div className="emergency-icon">⚠️</div>
+        <div className="emergency-icon" aria-hidden="true">⚠️</div>
         <h2>Are You Okay?</h2>
-        <p className="text-secondary">
-          {type === 'shake' ? 'Sudden motion detected!' :
-           type === 'audio' ? 'Potential threat detected in audio!' :
-           'Safety check triggered'}
+        <p style={{ color: 'var(--muted-foreground)', fontSize: '0.88rem', marginBottom: '4px' }}>
+          {type === 'shake' ? 'Sudden motion detected'
+           : type === 'audio' ? 'Potential threat detected in audio'
+           : 'Safety check triggered'}
         </p>
 
-        <div className="countdown">{countdown}</div>
-
-        <div className="countdown-bar">
-          <div
-            className="countdown-bar-fill"
-            style={{ width: `${progress}%` }}
-          />
+        <div className="countdown" role="timer" aria-live="assertive" aria-label={`${countdown} seconds remaining`}>
+          {countdown}
         </div>
 
-        <p className="text-muted" style={{ marginBottom: '16px', fontSize: '0.8rem' }}>
-          Emergency will be triggered automatically if no response
+        <div className="countdown-bar" aria-hidden="true">
+          <div className="countdown-bar-fill" style={{ width: `${progress}%` }} />
+        </div>
+
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'oklch(0.40 0.008 260)', marginBottom: '16px', letterSpacing: '0.04em' }}>
+          Emergency triggers automatically if no response
         </p>
 
         {/* Optional police notification toggle */}
         <label
+          htmlFor="notify-police-toggle"
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
             cursor: 'pointer',
             marginBottom: '20px',
-            fontSize: '0.82rem',
-            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.72rem',
+            color: 'var(--muted-foreground)',
             justifyContent: 'center',
+            letterSpacing: '0.04em',
           }}
         >
           <input
@@ -263,17 +264,17 @@ export default function EmergencyPopup({ type, onOk }) {
             id="notify-police-toggle"
             checked={notifyPolice}
             onChange={e => setNotifyPolice(e.target.checked)}
-            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: 'var(--accent)' }}
           />
           Also notify police (optional)
         </label>
 
-        <button className="btn btn-safe btn-ok" onClick={handleOk}>
-          ✅ I'm Okay!
+        <button id="emergency-ok-btn" className="btn btn-safe btn-ok" onClick={handleOk}>
+          I&apos;m Okay
         </button>
 
-        <button className="btn btn-danger btn-not-ok" onClick={handleNotOk}>
-          🚨 I Need Help!
+        <button id="emergency-help-btn" className="btn btn-danger btn-not-ok" onClick={handleNotOk}>
+          I Need Help
         </button>
       </div>
     </div>

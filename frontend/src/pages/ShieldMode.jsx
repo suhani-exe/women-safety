@@ -438,9 +438,17 @@ export default function ShieldMode() {
 
   return (
     <div className="page-content page-enter shield-page">
+      {/* Page Header */}
       <div className="page-header">
-        <button className="back-btn" onClick={() => navigate('/dashboard')}>←</button>
-        <h2>Shield Mode</h2>
+        <button className="back-btn" onClick={() => navigate('/dashboard')} aria-label="Go back">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+        <div style={{ flex: 1 }}>
+          <span className="eyebrow" style={{ display: 'block', marginBottom: '2px' }}>AI Protection</span>
+          <h2 style={{ lineHeight: 1.1 }}>Shield Mode</h2>
+        </div>
       </div>
 
       {/* Shield Button */}
@@ -448,60 +456,61 @@ export default function ShieldMode() {
         <button
           className={`shield-btn ${active ? 'active' : ''}`}
           onClick={active ? deactivateShield : activateShield}
+          aria-label={active ? 'Deactivate Shield Mode' : 'Activate Shield Mode'}
         >
-          <span className="shield-icon">{active ? '🔴' : '🛡️'}</span>
-          {active ? 'STOP' : 'ACTIVATE'}
+          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2l7 4v5c0 4.97-3.13 9.28-7 11-3.87-1.72-7-6.03-7-11V6l7-4z" />
+          </svg>
+          <span>{active ? 'STOP' : 'ACTIVATE'}</span>
         </button>
       </div>
 
-      <p className="text-secondary" style={{ marginBottom: '20px' }}>
-        {active
-          ? '🟢 Listening and analyzing for threats...'
-          : 'Tap to start AI-powered audio monitoring'}
+      <p style={{ marginBottom: '22px', fontFamily: 'var(--font-mono)', fontSize: '0.72rem', letterSpacing: '0.06em', color: active ? 'var(--emerald)' : 'var(--muted-foreground)', textAlign: 'center', textTransform: 'uppercase' }}>
+        {active ? '● Listening and analyzing...' : 'Tap to start AI-powered monitoring'}
       </p>
 
-      {/* Audio Waveform Visualization */}
+      {/* Waveform & Analysis (active only) */}
       {active && (
         <>
           <div className="waveform-container">
-            <canvas ref={canvasRef} />
+            <canvas ref={canvasRef} aria-hidden="true" />
           </div>
 
-          {/* Threat Level Indicator */}
-          <div className={`threat-indicator ${threatLevel.toLowerCase()}`}>
-            {threatLevel === 'SAFE' && '✅ Environment is SAFE'}
-            {threatLevel === 'SUSPICIOUS' && '⚠️ SUSPICIOUS activity detected'}
-            {threatLevel === 'DANGER' && '🚨 DANGER detected!'}
+          {/* Threat Indicator */}
+          <div className={`threat-indicator ${threatLevel.toLowerCase()}`} role="status">
+            {threatLevel === 'SAFE' && 'Environment is SAFE'}
+            {threatLevel === 'SUSPICIOUS' && 'SUSPICIOUS activity detected'}
+            {threatLevel === 'DANGER' && 'DANGER detected!'}
           </div>
 
           {/* Current Transcript */}
           {currentTranscript && (
-            <div className="glass-card-static" style={{ marginBottom: '16px', textAlign: 'left' }}>
-              <p className="text-muted" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>
-                🎤 Live Transcript
+            <div className="glass-card-static" style={{ marginBottom: '14px', textAlign: 'left' }}>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted-foreground)', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Live Transcript
               </p>
-              <p style={{ fontSize: '0.85rem' }}>{currentTranscript}</p>
+              <p style={{ fontSize: '0.85rem', lineHeight: 1.6 }}>{currentTranscript}</p>
             </div>
           )}
 
           {/* Analysis Log */}
           <div className="analysis-log">
-            <h4 style={{ marginBottom: '8px', textAlign: 'left' }}>📊 Analysis Log</h4>
+            <span className="eyebrow" style={{ display: 'block', marginBottom: '10px', textAlign: 'left' }}>Analysis Log</span>
             {analysisLog.length === 0 ? (
-              <p className="text-muted" style={{ fontSize: '0.82rem' }}>
-                Waiting for speech to analyze...
+              <p className="text-muted" style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>
+                Waiting for speech...
               </p>
             ) : (
               analysisLog.map((entry, i) => (
                 <div key={i} className={`analysis-entry ${entry.level.toLowerCase()}`}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: 600 }}>{entry.level}</span>
-                    <span className="text-muted">{entry.timestamp}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: '0.72rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{entry.level}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: 'var(--muted-foreground)' }}>{entry.timestamp}</span>
                   </div>
-                  <p>{entry.reason}</p>
+                  <p style={{ fontSize: '0.82rem' }}>{entry.reason}</p>
                   {entry.transcript && (
-                    <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '4px' }}>
-                      "{entry.transcript}"
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--muted-foreground)', marginTop: '4px' }}>
+                      &ldquo;{entry.transcript}&rdquo;
                     </p>
                   )}
                 </div>
@@ -511,165 +520,106 @@ export default function ShieldMode() {
         </>
       )}
 
-      {/* ============================================
-          Upload & Record Section — always visible
-          ============================================ */}
+      {/* Upload & Record — always visible */}
       <div className="upload-section" style={{ marginTop: '28px' }}>
-        <h3 style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          📤 Upload &amp; Analyze Audio
-        </h3>
-        <p className="text-secondary" style={{ fontSize: '0.82rem', marginBottom: '16px' }}>
-          Record a clip or pick an audio file — AI will check for threats.
+        <span className="eyebrow" style={{ display: 'block', marginBottom: '6px' }}>Upload &amp; Analyze</span>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.82rem', color: 'var(--muted-foreground)', marginBottom: '16px' }}>
+          Record a clip or pick an audio file &mdash; AI will check for threats.
         </p>
 
-        {/* Record / Stop buttons */}
+        {/* Record / Stop */}
         <div className="upload-actions">
           {!recording ? (
-            <button
-              className="btn btn-primary"
-              onClick={startRecording}
-              disabled={uploadingAudio}
-              style={{ flex: 1 }}
-            >
-              🎙️ Record Audio
+            <button id="shield-record-btn" className="btn btn-primary" onClick={startRecording} disabled={uploadingAudio} style={{ flex: 1 }}>
+              Record Audio
             </button>
           ) : (
-            <button
-              className="btn btn-danger"
-              onClick={stopRecording}
-              style={{ flex: 1 }}
-            >
-              ⏹ Stop ({formatTime(recordingTime)})
+            <button id="shield-stop-btn" className="btn btn-danger" onClick={stopRecording} style={{ flex: 1 }}>
+              Stop ({formatTime(recordingTime)})
             </button>
           )}
 
           <button
+            id="shield-pick-file-btn"
             className="btn btn-outline"
             onClick={() => fileInputRef.current?.click()}
             disabled={recording || uploadingAudio}
             style={{ flex: 1 }}
           >
-            📁 Pick File
+            Pick File
           </button>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="audio/*"
-            style={{ display: 'none' }}
-            onChange={handleFileSelect}
-          />
+          <input ref={fileInputRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={handleFileSelect} />
         </div>
 
         {/* Recording indicator */}
         {recording && (
-          <div className="recording-indicator">
-            <span className="rec-dot" />
-            <span>Recording… {formatTime(recordingTime)}</span>
+          <div className="recording-indicator" role="status" aria-live="polite">
+            <span className="rec-dot" aria-hidden="true" />
+            Recording&hellip; {formatTime(recordingTime)}
           </div>
         )}
 
-        {/* Pending audio preview */}
+        {/* Audio preview */}
         {(recordedBlob || selectedFile) && !recording && (
           <div className="audio-pending glass-card-static" style={{ marginTop: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>
-                {recordedBlob
-                  ? `🎙️ Recorded clip (${formatTime(recordingTime)})`
-                  : `📁 ${selectedFile.name}`}
+              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                {recordedBlob ? `Recorded clip (${formatTime(recordingTime)})` : selectedFile?.name}
               </span>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => { discardRecording(); setSelectedFile(null); }}
-                title="Discard"
-              >
-                ✕
+              <button className="btn btn-ghost btn-sm" onClick={() => { discardRecording(); setSelectedFile(null) }} aria-label="Discard recording">
+                &times;
               </button>
             </div>
 
-            {/* Playback */}
-            {recordedBlob && (
-              <audio
-                controls
-                src={URL.createObjectURL(recordedBlob)}
-                style={{ width: '100%', marginBottom: '10px', borderRadius: '8px' }}
-              />
-            )}
-            {selectedFile && (
-              <audio
-                controls
-                src={URL.createObjectURL(selectedFile)}
-                style={{ width: '100%', marginBottom: '10px', borderRadius: '8px' }}
-              />
-            )}
+            {recordedBlob && <audio controls src={URL.createObjectURL(recordedBlob)} style={{ width: '100%', marginBottom: '10px' }} />}
+            {selectedFile && <audio controls src={URL.createObjectURL(selectedFile)} style={{ width: '100%', marginBottom: '10px' }} />}
 
-            <button
-              className="btn btn-primary btn-full"
-              onClick={analyzeAudio}
-              disabled={uploadingAudio}
-            >
+            <button id="shield-analyze-btn" className="btn btn-primary btn-full" onClick={analyzeAudio} disabled={uploadingAudio}>
               {uploadingAudio ? (
-                <>
-                  <span className="spin" style={{ display: 'inline-block' }}>⏳</span>
-                  {' '}Analyzing with AI…
-                </>
-              ) : (
-                '🔍 Analyze for Threats'
-              )}
+                <><span className="spin" aria-hidden="true">⏳</span> Analyzing with AI&hellip;</>
+              ) : 'Analyze for Threats'}
             </button>
           </div>
         )}
 
-        {/* Upload Result */}
+        {/* Upload result */}
         {uploadResult && (
-          <div
-            className={`upload-result glass-card-static threat-indicator ${uploadResult.threat_level?.toLowerCase()}`}
-            style={{ marginTop: '16px', textAlign: 'left' }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-                {uploadResult.threat_level === 'SAFE' && '✅ SAFE'}
-                {uploadResult.threat_level === 'SUSPICIOUS' && '⚠️ SUSPICIOUS'}
-                {uploadResult.threat_level === 'DANGER' && '🚨 DANGER'}
+          <div className={`upload-result glass-card-static threat-indicator ${uploadResult.threat_level?.toLowerCase()}`} style={{ marginTop: '14px', textAlign: 'left' }} role="alert">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.78rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                {uploadResult.threat_level}
               </span>
-              <span className="text-muted" style={{ fontSize: '0.78rem' }}>
-                Confidence: {Math.round((uploadResult.confidence || 0) * 100)}%
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
+                {Math.round((uploadResult.confidence || 0) * 100)}% confidence
               </span>
             </div>
 
             {uploadResult.transcript && (
               <div style={{ marginBottom: '8px' }}>
-                <p className="text-muted" style={{ fontSize: '0.72rem', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Transcript
-                </p>
-                <p style={{ fontSize: '0.85rem', fontStyle: 'italic' }}>"{uploadResult.transcript}"</p>
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: 'var(--muted-foreground)', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Transcript</p>
+                <p style={{ fontSize: '0.83rem', fontStyle: 'italic' }}>&ldquo;{uploadResult.transcript}&rdquo;</p>
               </div>
             )}
-
             <div style={{ marginBottom: '8px' }}>
-              <p className="text-muted" style={{ fontSize: '0.72rem', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Reason
-              </p>
-              <p style={{ fontSize: '0.85rem' }}>{uploadResult.reason}</p>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: 'var(--muted-foreground)', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Reason</p>
+              <p style={{ fontSize: '0.83rem' }}>{uploadResult.reason}</p>
             </div>
-
             <div>
-              <p className="text-muted" style={{ fontSize: '0.72rem', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Recommended Action
-              </p>
-              <p style={{ fontSize: '0.85rem', fontWeight: 500 }}>{uploadResult.recommended_action}</p>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: 'var(--muted-foreground)', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Recommended Action</p>
+              <p style={{ fontSize: '0.83rem', fontWeight: 600 }}>{uploadResult.recommended_action}</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Instructions when inactive */}
+      {/* How it works — inactive only */}
       {!active && (
-        <div style={{ marginTop: '20px' }}>
-          <div className="glass-card-static" style={{ marginBottom: '12px' }}>
-            <h4>🎙️ How it works</h4>
-            <ol style={{ paddingLeft: '20px', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.8' }}>
-              <li>Tap <strong>ACTIVATE</strong> to start listening</li>
+        <div style={{ marginTop: '22px' }}>
+          <div className="glass-card-static" style={{ marginBottom: '10px' }}>
+            <span className="eyebrow" style={{ display: 'block', marginBottom: '10px' }}>How it works</span>
+            <ol style={{ paddingLeft: '18px', color: 'var(--muted-foreground)', fontSize: '0.82rem', lineHeight: '1.85', fontFamily: 'var(--font-sans)' }}>
+              <li>Tap <strong style={{ color: 'var(--foreground)' }}>ACTIVATE</strong> to start listening</li>
               <li>Audio is transcribed and analyzed every 5 seconds</li>
               <li>AI detects threats in real-time</li>
               <li>Alarm sounds if danger is detected</li>
@@ -677,20 +627,17 @@ export default function ShieldMode() {
             </ol>
           </div>
 
-          <div className="glass-card-static" style={{ marginBottom: '12px' }}>
-            <h4>📤 Upload Audio</h4>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-              Use the "Record Audio" or "Pick File" buttons above to record a clip
-              or select an existing audio file. The AI will listen and check for
-              any threats, harassment, or danger.
+          <div className="glass-card-static" style={{ marginBottom: '10px' }}>
+            <span className="eyebrow" style={{ display: 'block', marginBottom: '8px' }}>Upload Audio</span>
+            <p style={{ color: 'var(--muted-foreground)', fontSize: '0.82rem', fontFamily: 'var(--font-sans)', lineHeight: 1.65 }}>
+              Record a clip or select an existing audio file. The AI will listen and check for threats, harassment, or danger.
             </p>
           </div>
 
           <div className="glass-card-static">
-            <h4>📳 Shake Detection</h4>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-              Motion detection is always active. If your phone is shaken violently,
-              an emergency check will trigger automatically.
+            <span className="eyebrow" style={{ display: 'block', marginBottom: '8px' }}>Shake Detection</span>
+            <p style={{ color: 'var(--muted-foreground)', fontSize: '0.82rem', fontFamily: 'var(--font-sans)', lineHeight: 1.65 }}>
+              Motion detection is always active. A violent shake triggers an emergency check automatically.
             </p>
           </div>
         </div>
