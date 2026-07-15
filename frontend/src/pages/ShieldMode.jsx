@@ -28,6 +28,14 @@ export default function ShieldMode() {
     transcripts: 0,
   })
 
+  // --- Upload / Record state ---
+  const [recording, setRecording] = useState(false)
+  const [recordingTime, setRecordingTime] = useState(0)
+  const [uploadingAudio, setUploadingAudio] = useState(false)
+  const [uploadResult, setUploadResult] = useState(null)
+  const [recordedBlob, setRecordedBlob] = useState(null)
+  const [selectedFile, setSelectedFile] = useState(null)
+
   const canvasRef = useRef(null)
   const animationRef = useRef(null)
   const audioContextRef = useRef(null)
@@ -592,6 +600,15 @@ export default function ShieldMode() {
               <li>Keywords are fast path signals, and context still goes to the LLM</li>
               <li>Emergency contacts are alerted after confirmation</li>
             </ol>
+          </div>
+
+          <div className="glass-card-static" style={{ marginBottom: '12px' }}>
+            <h4>📤 Upload Audio</h4>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
+              Use the "Record Audio" or "Pick File" buttons above to record a clip
+              or select an existing audio file. The AI will listen and check for
+              any threats, harassment, or danger.
+            </p>
           </div>
 
           <div className="glass-card-static">
