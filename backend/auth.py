@@ -44,11 +44,15 @@ def create_token(user_id: int) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
-    """FastAPI dependency — extracts user_id from JWT token in Authorization header."""
+def decode_user_id_from_token(token: str) -> int:
+    """Decode a JWT token and return the user id."""
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = int(payload.get("sub"))
-        return user_id
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return int(payload.get("sub"))
     except (JWTError, ValueError, TypeError):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
+    """FastAPI dependency — extracts user_id from JWT token in Authorization header."""
+    return decode_user_id_from_token(credentials.credentials)

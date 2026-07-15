@@ -5,7 +5,9 @@ All API routes in one file for hackathon simplicity.
 
 import os
 import uuid
+import asyncio
 import requests
+from contextlib import suppress
 from datetime import datetime
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
@@ -20,9 +22,9 @@ load_dotenv()
 # Twilio SMS Helper
 # ============================================
 
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")  # E.164 format e.g. +15551234567
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "").strip()  # E.164 format e.g. +15551234567
 
 def send_sms(to_phone: str, message: str) -> dict:
     """
@@ -30,7 +32,8 @@ def send_sms(to_phone: str, message: str) -> dict:
     Returns { success: bool, error: str|None }.
     Falls back gracefully if Twilio is not configured.
     """
-    if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER]):
+    to_phone = (to_phone or "").strip()
+    if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, to_phone]):
         print(f"⚠️ Twilio not configured — SMS NOT sent to {to_phone}")
         return {"success": False, "error": "Twilio not configured"}
 
@@ -62,10 +65,13 @@ from database import (
     add_contact, get_contacts, delete_contact,
     create_incident, get_incidents, resolve_incident,
     create_report, get_heatmap_data,
-    create_safewalk, get_active_safewalk, end_safewalk
+    create_safewalk, get_active_safewalk, end_safewalk,
+    claim_overdue_safewalks, update_safewalk_status
 )
 from auth import hash_password, verify_password, create_token, get_current_user_id
-from gemini_service import analyze_transcript, analyze_audio_file
+from openai_service import analyze_transcript, analyze_audio_file
+from services.notification_service import send_emergency_alert
+from ws.websocket import router as realtime_ws_router
 
 # ============================================
 # App Setup
@@ -85,16 +91,84 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(realtime_ws_router)
 
 # Create uploads directory
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+safewalk_monitor_task: Optional[asyncio.Task] = None
+
+
+def _build_safewalk_overdue_message(user: dict, walk: dict) -> str:
+    maps_link = f"https://www.google.com/maps?q={walk['dest_lat']},{walk['dest_lng']}"
+    eta = walk.get("eta")
+    eta_display = eta.strftime("%I:%M %p, %b %d %Y") if hasattr(eta, "strftime") else str(eta)
+    return (
+        f"\U0001f6a8 SAFEWALK ALERT from {user['name']}!\n"
+        f"They have not marked their SafeWalk as complete by the expected arrival time.\n"
+        f"Destination: {walk.get('dest_name', 'Unknown')}\n"
+        f"Destination map: {maps_link}\n"
+        f"Expected arrival: {eta_display}\n"
+        f"Please contact them immediately."
+    )
+
+
+async def check_overdue_safewalks():
+    overdue_walks = claim_overdue_safewalks()
+    for walk in overdue_walks:
+        user = get_user_by_id(walk["user_id"])
+        if not user:
+            update_safewalk_status(walk["id"], walk["user_id"], "overdue_alerted")
+            continue
+
+        message = _build_safewalk_overdue_message(user, walk)
+        contacts = get_contacts(walk["user_id"])
+        sms_results = []
+        for contact in contacts:
+            result = send_sms(contact["phone"], message)
+            sms_results.append({
+                "contact": contact["name"],
+                "phone": contact["phone"],
+                "sms_sent": result["success"],
+                "sms_error": result.get("error"),
+            })
+
+        create_incident(
+            user_id=walk["user_id"],
+            incident_type="safewalk",
+            threat_level="DANGER",
+            transcript=f"SafeWalk overdue for destination: {walk.get('dest_name')}",
+            lat=walk.get("dest_lat"),
+            lng=walk.get("dest_lng"),
+        )
+        update_safewalk_status(walk["id"], walk["user_id"], "overdue_alerted")
+        print(f"SafeWalk overdue alert processed for walk {walk['id']}: {sms_results}")
+
+
+async def safewalk_monitor_loop():
+    while True:
+        try:
+            await check_overdue_safewalks()
+        except Exception as exc:
+            print(f"SafeWalk monitor error: {exc}")
+        await asyncio.sleep(60)
+
 # Initialize database on startup
 @app.on_event("startup")
-def startup():
+async def startup():
+    global safewalk_monitor_task
     init_db()
+    safewalk_monitor_task = asyncio.create_task(safewalk_monitor_loop())
     print("🛡️ ShieldHer API is running!")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    if safewalk_monitor_task:
+        safewalk_monitor_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await safewalk_monitor_task
 
 
 # ============================================
@@ -149,10 +223,6 @@ class SafeWalkRequest(BaseModel):
     dest_lng: float
     eta_minutes: int  # how many minutes until expected arrival
 
-
-# ============================================
-# Auth Routes
-# ============================================
 
 @app.post("/api/register")
 def register(req: RegisterRequest):
@@ -213,10 +283,6 @@ def update_profile(req: UpdateProfileRequest, user_id: int = Depends(get_current
     return {"user": user}
 
 
-# ============================================
-# Emergency Contacts Routes
-# ============================================
-
 @app.get("/api/contacts")
 def list_contacts(user_id: int = Depends(get_current_user_id)):
     """Get all emergency contacts for current user."""
@@ -240,17 +306,13 @@ def remove_contact(contact_id: int, user_id: int = Depends(get_current_user_id))
     return {"message": "Contact deleted"}
 
 
-# ============================================
-# Shield Mode — Audio Analysis Routes
-# ============================================
-
 @app.post("/api/audio/analyze")
-def analyze_audio_transcript(req: TranscriptRequest, user_id: int = Depends(get_current_user_id)):
+async def analyze_audio_transcript(req: TranscriptRequest, user_id: int = Depends(get_current_user_id)):
     """
     Analyze a text transcript (from Web Speech API) for threats.
     This is the primary analysis endpoint — browser transcribes, we analyze.
     """
-    result = analyze_transcript(req.transcript)
+    result = await analyze_transcript(req.transcript)
 
     # Log if suspicious or dangerous
     if result["threat_level"] in ["SUSPICIOUS", "DANGER"]:
@@ -274,7 +336,7 @@ async def upload_and_analyze_audio(
     user_id: int = Depends(get_current_user_id)
 ):
     """
-    Upload an audio file and analyze it directly with Gemini (multimodal).
+    Upload an audio file and analyze it with OpenAI transcription + text analysis.
     Alternative to transcript-based analysis.
     """
     # Save the audio file
@@ -285,8 +347,13 @@ async def upload_and_analyze_audio(
     with open(filepath, "wb") as f:
         f.write(content)
 
-    # Analyze with Gemini
-    result = analyze_audio_file(filepath)
+    try:
+        result = await analyze_audio_file(filepath)
+    finally:
+        try:
+            os.remove(filepath)
+        except OSError:
+            pass
 
     # Log if suspicious or dangerous
     if result.get("threat_level") in ["SUSPICIOUS", "DANGER"]:
@@ -312,9 +379,6 @@ def get_audio_history(user_id: int = Depends(get_current_user_id)):
     return {"incidents": incidents_list}
 
 
-# ============================================
-# Emergency Protocol Routes
-# ============================================
 
 @app.post("/api/emergency/trigger")
 def trigger_emergency(req: EmergencyRequest, user_id: int = Depends(get_current_user_id)):
@@ -324,43 +388,23 @@ def trigger_emergency(req: EmergencyRequest, user_id: int = Depends(get_current_
     - Optionally notifies police helpline if notify_police=True.
     - Returns contact info + deep links for the frontend UI.
     """
-    # Log the incident
-    incident = create_incident(
+    # Use the same notification service as the working realtime LLM SOS path.
+    notification = send_emergency_alert(
         user_id=user_id,
+        summary=req.transcript or f"{req.type.title()} SOS triggered by user.",
+        severity="DANGER",
+        latitude=req.latitude,
+        longitude=req.longitude,
+        transcript=req.transcript or f"{req.type.title()} SOS triggered by user.",
         incident_type=req.type,
-        threat_level="DANGER",
-        transcript=req.transcript,
-        lat=req.latitude,
-        lng=req.longitude
+        alert_reason="Emergency SOS was triggered by the user.",
     )
 
-    # Get emergency contacts and user info
     contacts = get_contacts(user_id)
     user = get_user_by_id(user_id)
-
-    # Build the SOS message
     maps_link = f"https://www.google.com/maps?q={req.latitude},{req.longitude}"
-    sos_message = (
-        f"\U0001f6a8 EMERGENCY SOS from {user['name']}!\n"
-        f"They need immediate help!\n"
-        f"\U0001f4cd Location: {maps_link}\n"
-        f"Time: {datetime.now().strftime('%I:%M %p, %b %d %Y')}\n"
-        f"Type: {req.type}\n"
-        f"Please call them or emergency services immediately!"
-    )
-
-    # -------------------------------------------------------
-    # ALWAYS send SMS to every emergency contact via Twilio
-    # -------------------------------------------------------
-    sms_results = []
-    for contact in contacts:
-        result = send_sms(contact["phone"], sos_message)
-        sms_results.append({
-            "contact": contact["name"],
-            "phone": contact["phone"],
-            "sms_sent": result["success"],
-            "sms_error": result.get("error"),
-        })
+    sos_message = notification.get("message", "")
+    sms_results = notification.get("sms_results", [])
 
     # -------------------------------------------------------
     # OPTIONALLY notify police — only if user explicitly chose to
@@ -377,7 +421,7 @@ def trigger_emergency(req: EmergencyRequest, user_id: int = Depends(get_current_
         )
         # NOTE: Real emergency numbers (100, 911) don't accept SMS.
         # This would go to a configured police liaison number in production.
-        police_number = os.getenv("POLICE_SMS_NUMBER", "")
+        police_number = os.getenv("POLICE_SMS_NUMBER", "").strip()
         if police_number:
             police_sms_result = send_sms(police_number, police_msg)
         else:
@@ -398,11 +442,15 @@ def trigger_emergency(req: EmergencyRequest, user_id: int = Depends(get_current_
             "tel_link": tel_link,
         })
 
+    any_sms_sent = any(r["sms_sent"] for r in sms_results)
+
     return {
-        "incident": incident,
+        "incident": notification.get("incident"),
         "sos_message": sos_message,
         "contacts": contact_alerts,
         "sms_results": sms_results,          # Twilio delivery status per contact
+        "sms_success": any_sms_sent,
+        "sms_warning": None if any_sms_sent else "SMS delivery failed - use WhatsApp links below",
         "police_notified": police_sms_result,
         "emergency_numbers": [
             {"name": "Police (India)", "phone": "100", "tel_link": "tel:100"},
@@ -421,10 +469,6 @@ def resolve_emergency(incident_id: int, user_id: int = Depends(get_current_user_
         raise HTTPException(status_code=404, detail="Incident not found")
     return {"incident": incident}
 
-
-# ============================================
-# Location Routes
-# ============================================
 
 @app.post("/api/location/police")
 def find_nearest_police(req: LocationUpdate):
@@ -479,10 +523,6 @@ def find_nearest_police(req: LocationUpdate):
         return {"stations": [], "error": f"Could not fetch police stations: {str(e)[:100]}"}
 
 
-# ============================================
-# Community Safety Reports Routes
-# ============================================
-
 @app.post("/api/reports")
 def submit_report(req: ReportRequest, user_id: int = Depends(get_current_user_id)):
     """Submit an anonymous safety report for the heatmap."""
@@ -495,11 +535,6 @@ def get_heatmap():
     """Get all safety reports for the heatmap overlay (public endpoint)."""
     reports = get_heatmap_data()
     return {"reports": reports}
-
-
-# ============================================
-# SafeWalk Routes
-# ============================================
 
 @app.post("/api/safewalk/start")
 def start_safewalk(req: SafeWalkRequest, user_id: int = Depends(get_current_user_id)):
@@ -526,9 +561,6 @@ def complete_safewalk(walk_id: int, user_id: int = Depends(get_current_user_id))
     return {"safewalk": walk, "message": "Glad you reached safely! 🎉"}
 
 
-# ============================================
-# Health Check
-# ============================================
 
 @app.get("/api/health")
 def health_check():
