@@ -181,6 +181,37 @@ export default function Dashboard() {
           </div>
         </section>
 
+        {/* ── Calm / Safe Zone ─────────────────────── */}
+        <section className="calm-zone-entry reveal reveal-delay-3" ref={addRef} aria-label="Calm Safe Zone">
+          <div className="calm-zone-card" onClick={() => navigate('/calm')} role="button" tabIndex={0}
+            onKeyDown={e => e.key === 'Enter' && navigate('/calm')}
+            aria-label="Enter the Calm Safe Zone">
+            {/* Glow orb */}
+            <div className="czc-glow" aria-hidden="true" />
+
+            {/* Circle entry portal */}
+            <div className="czc-portal-wrap" aria-hidden="true">
+              <div className="czc-ring czc-ring-1" />
+              <div className="czc-ring czc-ring-2" />
+              <div className="czc-circle">
+                <span className="czc-icon">🌸</span>
+              </div>
+            </div>
+
+            {/* Text */}
+            <div className="czc-text">
+              <span className="czc-label">CalmZone</span>
+              <span className="czc-desc">Breathe, rest &amp; feel safe</span>
+            </div>
+
+            {/* Arrow */}
+            <svg className="czc-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+        </section>
+
         {/* Recent Activity */}
         <section className="recent-section" aria-label="Recent activity">
           <span className="eyebrow reveal reveal-delay-1" ref={addRef} style={{ marginBottom: '14px', display: 'block' }}>

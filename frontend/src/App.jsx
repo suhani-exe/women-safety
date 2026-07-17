@@ -11,6 +11,7 @@ import MapView from './pages/MapView'
 import Contacts from './pages/Contacts'
 import SafeWalk from './pages/SafeWalk'
 import Hub from './pages/Hub'
+import CalmZone from './pages/CalmZone'
 
 // ============================================
 // API Helper
@@ -163,6 +164,7 @@ function App() {
               <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
               <Route path="/safewalk" element={<ProtectedRoute><SafeWalk /></ProtectedRoute>} />
               <Route path="/hub" element={<ProtectedRoute><Hub /></ProtectedRoute>} />
+              <Route path="/calm" element={<ProtectedRoute><CalmZone /></ProtectedRoute>} />
             </Routes>
 
             {showNavbar && <Navbar />}
