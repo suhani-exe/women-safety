@@ -26,7 +26,7 @@ const resources = {
     { icon: '👩', title: 'Women Helpline',    desc: 'National Commission for Women — 1091',             link: 'tel:1091' },
     { icon: '🚑', title: 'Ambulance',         desc: 'Emergency medical services — 102',                 link: 'tel:102' },
     { icon: '👧', title: 'Child Helpline',    desc: 'For children in distress — 1098',                  link: 'tel:1098' },
-    { icon: '🆘', title: 'National Emergency','desc': 'Single emergency number — 112',                  link: 'tel:112' },
+    { icon: '🆘', title: 'National Emergency', desc: 'Single emergency number — 112',                   link: 'tel:112' },
   ],
   selfDefense: [
     { icon: '🥋', title: 'Basic Self-Defense Moves',  desc: 'Simple techniques everyone should know',            link: 'https://www.youtube.com/results?search_query=basic+self+defense+for+women' },
@@ -66,49 +66,50 @@ export default function Hub() {
         <div className="orb orb-3" />
         <div className="dot-grid" />
       </div>
-    <div className="page-content page-enter">
-      {/* Page Header */}
-      <div className="page-header">
-        <button className="back-btn" onClick={() => navigate('/dashboard')} aria-label="Go back">
-          <BackIcon />
-        </button>
-        <div style={{ flex: 1 }}>
-          <span className="eyebrow" style={{ display: 'block', marginBottom: '2px' }}>Resources</span>
-          <h2 style={{ lineHeight: 1.1 }}>Empowerment Hub</h2>
-        </div>
-      </div>
 
-      <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.84rem', color: 'var(--muted-foreground)', marginBottom: '28px', lineHeight: 1.65 }}>
-        Safety, legal rights, financial inclusion, and skill development — all in one place.
-      </p>
-
-      {categories.map(({ key, label, eyebrow }) => (
-        <section key={key} className="hub-category" aria-label={label}>
-          <div className="hub-category-header">
-            <span className="eyebrow">{eyebrow}</span>
-            <h3>{label}</h3>
+      <div className="page-content page-enter">
+        {/* Page Header */}
+        <div className="page-header">
+          <button className="back-btn" onClick={() => navigate('/dashboard')} aria-label="Go back">
+            <BackIcon />
+          </button>
+          <div style={{ flex: 1 }}>
+            <span className="eyebrow" style={{ display: 'block', marginBottom: '2px' }}>Resources</span>
+            <h2 style={{ lineHeight: 1.1 }}>Empowerment Hub</h2>
           </div>
+        </div>
 
-          {resources[key].map((item, i) => (
-            <a
-              key={i}
-              href={item.link}
-              target={item.link.startsWith('tel:') ? '_self' : '_blank'}
-              rel="noopener noreferrer"
-              className={`resource-card reveal reveal-delay-${Math.min(i + 1, 6)}`}
-              ref={addRef}
-              aria-label={`${item.title} — ${item.desc}`}
-            >
-              <span className="resource-icon" aria-hidden="true">{item.icon}</span>
-              <div>
-                <div className="resource-title">{item.title}</div>
-                <div className="resource-desc">{item.desc}</div>
-              </div>
-            </a>
-          ))}
-        </section>
-      ))}
-    </div>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.84rem', color: 'var(--muted-foreground)', marginBottom: '28px', lineHeight: 1.65 }}>
+          Safety, legal rights, financial inclusion, and skill development — all in one place.
+        </p>
+
+        {categories.map(({ key, label, eyebrow }) => (
+          <section key={key} className="hub-category" aria-label={label}>
+            <div className="hub-category-header">
+              <span className="eyebrow">{eyebrow}</span>
+              <h3>{label}</h3>
+            </div>
+
+            {resources[key].map((item, i) => (
+              <a
+                key={i}
+                href={item.link}
+                target={item.link.startsWith('tel:') ? '_self' : '_blank'}
+                rel="noopener noreferrer"
+                className={`resource-card reveal reveal-delay-${Math.min(i + 1, 6)}`}
+                ref={addRef}
+                aria-label={`${item.title} — ${item.desc}`}
+              >
+                <span className="resource-icon" aria-hidden="true">{item.icon}</span>
+                <div>
+                  <div className="resource-title">{item.title}</div>
+                  <div className="resource-desc">{item.desc}</div>
+                </div>
+              </a>
+            ))}
+          </section>
+        ))}
+      </div>
     </>
   )
 }

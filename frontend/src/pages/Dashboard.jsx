@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch, useAuth, useEmergency } from '../App'
+import CalmZone from '../components/CalmZone'
 
 /* ── Inline SVG icons ───────────────────────────────── */
 const ShieldIcon = () => (
@@ -68,6 +69,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const [incidents, setIncidents] = useState([])
   const [shieldActive] = useState(false)
+  const [calmOpen, setCalmOpen] = useState(false)
   const addRef = useScrollReveal()
 
   useEffect(() => {
@@ -100,6 +102,9 @@ export default function Dashboard() {
 
   return (
     <>
+      {/* Calm Zone full-screen overlay */}
+      {calmOpen && <CalmZone onClose={() => setCalmOpen(false)} />}
+
       {/* Abstract background */}
       <div className="page-abstract-bg dashboard" aria-hidden="true">
         <div className="orb orb-1" />
@@ -180,6 +185,27 @@ export default function Dashboard() {
             </button>
           </div>
         </section>
+
+        {/* ── Calm / Safe Zone widget ── */}
+        <div className="calm-zone-entry-section reveal reveal-delay-3" ref={addRef}>
+          <button
+            id="calm-zone-entry-btn"
+            className="calm-zone-entry-card"
+            onClick={() => setCalmOpen(true)}
+            aria-label="Enter the Calm Safe Zone — guided breathing and affirmations"
+          >
+            <div className="calm-entry-orb-wrap" aria-hidden="true">
+              <div className="calm-entry-ring calm-entry-ring-2" />
+              <div className="calm-entry-ring" />
+              <div className="calm-entry-orb" />
+            </div>
+            <div className="calm-entry-text">
+              <h3>Calm / Safe Zone 💗</h3>
+              <p>Guided breathing &amp; gentle affirmations — stay as long as you need.</p>
+            </div>
+            <div className="calm-enter-btn" aria-hidden="true">✦ Enter Safe Zone</div>
+          </button>
+        </div>
 
         {/* Recent Activity */}
         <section className="recent-section" aria-label="Recent activity">
