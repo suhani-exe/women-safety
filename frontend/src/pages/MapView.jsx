@@ -57,7 +57,7 @@ export default function MapView() {
         () => {
           setUserPosition([28.6139, 77.2090])
           setLoading(false)
-          setError('Could not get your location. Showing default location.')
+          setError('')
         },
         { enableHighAccuracy: true, timeout: 10000 }
       )
@@ -111,95 +111,95 @@ export default function MapView() {
         <div className="orb orb-2" />
         <div className="orb orb-3" />
       </div>
-    <div className="page-content page-enter">
-      {/* Page Header */}
-      <div className="page-header">
-        <button className="back-btn" onClick={() => navigate('/dashboard')} aria-label="Go back">
-          <BackIcon />
-        </button>
-        <div style={{ flex: 1 }}>
-          <span className="eyebrow" style={{ display: 'block', marginBottom: '2px' }}>Location Services</span>
-          <h2 style={{ lineHeight: 1.1 }}>Safety Map</h2>
+      <div className="page-content page-enter">
+        {/* Page Header */}
+        <div className="page-header">
+          <button className="back-btn" onClick={() => navigate('/dashboard')} aria-label="Go back">
+            <BackIcon />
+          </button>
+          <div style={{ flex: 1 }}>
+            <span className="eyebrow" style={{ display: 'block', marginBottom: '2px' }}>Location Services</span>
+            <h2 style={{ lineHeight: 1.1 }}>Safety Map</h2>
+          </div>
         </div>
-      </div>
 
-      {error && (
-        <div className="glass-card-static" style={{ marginBottom: '12px', padding: '10px 14px' }}>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--amber)', letterSpacing: '0.03em' }}>
-            {error}
-          </p>
+        {error && (
+          <div className="glass-card-static" style={{ marginBottom: '12px', padding: '10px 14px' }}>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--amber)', letterSpacing: '0.03em' }}>
+              {error}
+            </p>
+          </div>
+        )}
+
+        {/* Map Controls */}
+        <div className="map-controls">
+          <button id="map-locate-btn" className="btn btn-outline btn-sm" onClick={refreshLocation}>
+            My Location
+          </button>
+          <button
+            id="map-police-btn"
+            className="btn btn-outline btn-sm"
+            onClick={() => userPosition && findPoliceStations(userPosition[0], userPosition[1])}
+          >
+            Find Police
+          </button>
         </div>
-      )}
 
-      {/* Map Controls */}
-      <div className="map-controls">
-        <button id="map-locate-btn" className="btn btn-outline btn-sm" onClick={refreshLocation}>
-          My Location
-        </button>
-        <button
-          id="map-police-btn"
-          className="btn btn-outline btn-sm"
-          onClick={() => userPosition && findPoliceStations(userPosition[0], userPosition[1])}
-        >
-          Find Police
-        </button>
-      </div>
-
-      {/* Map */}
-      <div className="map-container">
-        {userPosition && (
-          <MapContainer center={userPosition} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            />
-            <FlyToUser position={userPosition} />
-            <Marker position={userPosition} icon={userIcon}>
-              <Popup><strong>You are here</strong></Popup>
-            </Marker>
-            {policeStations.map((station, i) => (
-              <Marker key={i} position={[station.latitude, station.longitude]} icon={policeIcon}>
-                <Popup>
-                  <strong>{station.name}</strong>
-                  {station.phone && <><br />{station.phone}</>}
-                </Popup>
+        {/* Map */}
+        <div className="map-container">
+          {userPosition && (
+            <MapContainer center={userPosition} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              />
+              <FlyToUser position={userPosition} />
+              <Marker position={userPosition} icon={userIcon}>
+                <Popup><strong>You are here</strong></Popup>
               </Marker>
+              {policeStations.map((station, i) => (
+                <Marker key={i} position={[station.latitude, station.longitude]} icon={policeIcon}>
+                  <Popup>
+                    <strong>{station.name}</strong>
+                    {station.phone && <><br />{station.phone}</>}
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+          )}
+        </div>
+
+        {/* Police Station List */}
+        {policeStations.length > 0 && (
+          <div className="police-list">
+            <span className="eyebrow" style={{ display: 'block', margin: '16px 0 10px' }}>
+              Nearby Police Stations
+            </span>
+            {policeStations.slice(0, 5).map((station, i) => (
+              <div key={i} className="police-item">
+                <span className="police-icon" aria-hidden="true">🏛️</span>
+                <div style={{ flex: 1 }}>
+                  <div className="police-name">{station.name}</div>
+                  {station.phone && (
+                    <a href={`tel:${station.phone}`} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--accent)' }}>
+                      {station.phone}
+                    </a>
+                  )}
+                </div>
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${station.latitude},${station.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-outline btn-sm"
+                  aria-label={`Directions to ${station.name}`}
+                >
+                  Directions
+                </a>
+              </div>
             ))}
-          </MapContainer>
+          </div>
         )}
       </div>
-
-      {/* Police Station List */}
-      {policeStations.length > 0 && (
-        <div className="police-list">
-          <span className="eyebrow" style={{ display: 'block', margin: '16px 0 10px' }}>
-            Nearby Police Stations
-          </span>
-          {policeStations.slice(0, 5).map((station, i) => (
-            <div key={i} className="police-item">
-              <span className="police-icon" aria-hidden="true">🏛️</span>
-              <div style={{ flex: 1 }}>
-                <div className="police-name">{station.name}</div>
-                {station.phone && (
-                  <a href={`tel:${station.phone}`} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--accent)' }}>
-                    {station.phone}
-                  </a>
-                )}
-              </div>
-              <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${station.latitude},${station.longitude}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-outline btn-sm"
-                aria-label={`Directions to ${station.name}`}
-              >
-                Directions
-              </a>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
     </>
   )
 }
