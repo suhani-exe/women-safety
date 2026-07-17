@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiFetch, useToast } from '../App'
 
 export default function EmergencyPopup({ type, onOk }) {
@@ -7,6 +7,7 @@ export default function EmergencyPopup({ type, onOk }) {
   const [emergencyData, setEmergencyData] = useState(null)
   const [alarmAudio, setAlarmAudio] = useState(null)
   const [notifyPolice, setNotifyPolice] = useState(false)  // User's choice — optional
+  const cancelledRef = useRef(false)
   const { showToast } = useToast()
 
   // Play alarm sound (disguised as phone alarm)
@@ -44,13 +45,13 @@ export default function EmergencyPopup({ type, onOk }) {
 
   // Countdown timer
   useEffect(() => {
-    if (countdown <= 0 && !triggered) {
+    if (countdown <= 0 && !triggered && !cancelledRef.current) {
       handleNotOk()
       return
     }
 
     const timer = setTimeout(() => {
-      setCountdown(prev => prev - 1)
+      setCountdown(prev => Math.max(0, prev - 1))
     }, 1000)
 
     return () => clearTimeout(timer)
@@ -67,6 +68,7 @@ export default function EmergencyPopup({ type, onOk }) {
 
   // User pressed "I'm OK"
   const handleOk = () => {
+    cancelledRef.current = true
     stopAlarm()
     showToast("Glad you're safe! 💚", 'success')
     onOk()
@@ -74,7 +76,7 @@ export default function EmergencyPopup({ type, onOk }) {
 
   // User pressed "Not OK" or countdown expired
   const handleNotOk = async () => {
-    if (triggered) return
+    if (triggered || cancelledRef.current) return
     setTriggered(true)
     stopAlarm()
 
@@ -209,7 +211,7 @@ export default function EmergencyPopup({ type, onOk }) {
             </div>
           )}
 
-          <button id="emergency-safe-btn" className="btn btn-safe btn-full" onClick={onOk} style={{ marginTop: '12px' }}>
+          <button id="emergency-safe-btn" className="btn btn-safe btn-full emergency-sticky-action" onClick={handleOk} style={{ marginTop: '12px' }}>
             I&apos;m Safe Now &mdash; Cancel Emergency
           </button>
         </div>
@@ -218,7 +220,8 @@ export default function EmergencyPopup({ type, onOk }) {
   }
 
   // Countdown phase
-  const progress = (countdown / 15) * 100
+  const visibleCountdown = Math.max(0, countdown)
+  const progress = (visibleCountdown / 15) * 100
 
   return (
     <div className="emergency-overlay" role="dialog" aria-modal="true" aria-label="Safety check">
@@ -231,8 +234,8 @@ export default function EmergencyPopup({ type, onOk }) {
            : 'Safety check triggered'}
         </p>
 
-        <div className="countdown" role="timer" aria-live="assertive" aria-label={`${countdown} seconds remaining`}>
-          {countdown}
+        <div className="countdown" role="timer" aria-live="assertive" aria-label={`${visibleCountdown} seconds remaining`}>
+          {visibleCountdown}
         </div>
 
         <div className="countdown-bar" aria-hidden="true">
@@ -269,13 +272,15 @@ export default function EmergencyPopup({ type, onOk }) {
           Also notify police (optional)
         </label>
 
-        <button id="emergency-ok-btn" className="btn btn-safe btn-ok" onClick={handleOk}>
-          I&apos;m Okay
-        </button>
+        <div className="emergency-action-bar">
+          <button id="emergency-ok-btn" className="btn btn-safe btn-ok" onClick={handleOk}>
+            I&apos;m Okay
+          </button>
 
-        <button id="emergency-help-btn" className="btn btn-danger btn-not-ok" onClick={handleNotOk}>
-          I Need Help
-        </button>
+          <button id="emergency-help-btn" className="btn btn-danger btn-not-ok" onClick={handleNotOk}>
+            I Need Help
+          </button>
+        </div>
       </div>
     </div>
   )

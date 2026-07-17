@@ -47,6 +47,7 @@ export default function ShieldMode() {
   const locationIntervalRef = useRef(null)
   const pingIntervalRef = useRef(null)
   const activeRef = useRef(false)
+  const cancelRequestedRef = useRef(false)
 
   // --- Upload / Record refs ---
   const recordedChunksRef = useRef([])
@@ -175,6 +176,7 @@ export default function ShieldMode() {
         }
 
         if (message.type === 'alarm_started') {
+          cancelRequestedRef.current = false
           setAlarm({
             active: true,
             remaining: message.countdown_seconds || 15,
@@ -189,10 +191,12 @@ export default function ShieldMode() {
         }
 
         if (message.type === 'alarm_tick') {
-          setAlarm(prev => prev ? { ...prev, remaining: message.remaining_seconds } : prev)
+          const remaining = Math.max(0, message.remaining_seconds || 0)
+          setAlarm(prev => prev && !cancelRequestedRef.current ? { ...prev, remaining } : prev)
         }
 
         if (message.type === 'alarm_cancelled') {
+          cancelRequestedRef.current = false
           setAlarm(null)
           setThreatLevel('SAFE')
           setSessionStats(prev => ({
@@ -209,6 +213,7 @@ export default function ShieldMode() {
         }
 
         if (message.type === 'sos_sent') {
+          cancelRequestedRef.current = false
           setAlarm(null)
           setSosResult(message.notification)
           setSessionStats(prev => ({
@@ -229,6 +234,7 @@ export default function ShieldMode() {
         }
 
         if (message.type === 'sos_error') {
+          cancelRequestedRef.current = false
           setAlarm(null)
           showToast(message.message || 'SOS failed', 'error')
         }
@@ -436,6 +442,7 @@ export default function ShieldMode() {
 
   const activateShield = async () => {
     activeRef.current = true
+    cancelRequestedRef.current = false
     setActive(true)
     setThreatLevel('SAFE')
     setSessionStats({ sessionId: null, chunks: 0, bytes: 0, lastLocationAt: null, state: 'LISTENING', score: 0, transcripts: 0 })
@@ -461,6 +468,7 @@ export default function ShieldMode() {
         type: 'cancel_sos',
         reason: 'Shield Mode stopped by user',
       })
+      cancelRequestedRef.current = true
     }
     activeRef.current = false
     setActive(false)
@@ -473,10 +481,17 @@ export default function ShieldMode() {
   }
 
   const cancelSos = () => {
-    sendWsJson({
+    cancelRequestedRef.current = true
+    setAlarm(prev => prev ? { ...prev, cancelling: true } : prev)
+    const sent = sendWsJson({
       type: 'cancel_sos',
       reason: 'User marked safe from Shield Mode',
     })
+    if (!sent) {
+      cancelRequestedRef.current = false
+      setAlarm(prev => prev ? { ...prev, cancelling: false } : prev)
+      showToast('Realtime connection unavailable. Stop Shield Mode to prevent SOS.', 'error')
+    }
   }
 
   // ============================================
@@ -738,10 +753,12 @@ export default function ShieldMode() {
             <div className="glass-card-static" style={{ marginBottom: '16px', textAlign: 'center', borderColor: 'rgba(239, 68, 68, 0.5)' }}>
               <h3 style={{ color: '#EF4444', marginBottom: '8px' }}>Emergency Detected</h3>
               <p style={{ marginBottom: '12px' }}>
-                SOS will be sent in <strong>{alarm.remaining}</strong> seconds.
+                {alarm.cancelling
+                  ? 'Cancelling SOS...'
+                  : <>SOS will be sent in <strong>{Math.max(0, alarm.remaining)}</strong> seconds.</>}
               </p>
-              <button className="btn btn-primary" onClick={cancelSos}>
-                I am safe — Cancel SOS
+              <button className="btn btn-safe btn-full" onClick={cancelSos} disabled={alarm.cancelling}>
+                {alarm.cancelling ? 'Cancelling...' : 'I am safe - Cancel SOS'}
               </button>
             </div>
           )}

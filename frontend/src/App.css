@@ -1436,6 +1436,7 @@ h4 { font-size: 1.05rem; }
 .emergency-overlay {
   position: fixed;
   inset: 0;
+  padding: 16px;
   background: rgba(0,0,0,0.85);
   backdrop-filter: var(--blur-heavy);
   -webkit-backdrop-filter: var(--blur-heavy);
@@ -1453,7 +1454,10 @@ h4 { font-size: 1.05rem; }
   border-radius: var(--radius);
   padding: 36px 28px;
   max-width: 380px;
+  max-height: calc(100vh - 32px);
   width: 90%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   text-align: center;
   animation: modalIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   box-shadow: var(--shadow-red);
@@ -1508,6 +1512,15 @@ h4 { font-size: 1.05rem; }
 
 .emergency-modal .btn-ok  { width: 100%; padding: 16px; font-size: 1rem; margin-bottom: 10px; }
 .emergency-modal .btn-not-ok { width: 100%; padding: 12px; font-size: 0.88rem; }
+
+.emergency-action-bar,
+.emergency-sticky-action {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-top: 10px;
+  background: linear-gradient(to top, rgba(18, 6, 12, 0.98) 72%, rgba(18, 6, 12, 0));
+}
 
 /* Emergency contact cards */
 .emergency-contact-card {

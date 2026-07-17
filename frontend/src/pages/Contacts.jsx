@@ -1,18 +1,45 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch, useToast } from '../App'
 
 function useScrollReveal() {
   const refs = useRef([])
+  const observerRef = useRef(null)
+
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') }),
-      { threshold: 0.1, rootMargin: '0px 0px -20px 0px' }
+    if (!('IntersectionObserver' in window)) {
+      refs.current.forEach(el => el?.classList.add('visible'))
+      return undefined
+    }
+
+    observerRef.current = new IntersectionObserver(
+      entries => entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible')
+          observerRef.current?.unobserve(e.target)
+        }
+      }),
+      { threshold: 0.1, rootMargin: '0px 0px -20px 0px' },
     )
-    refs.current.forEach(el => { if (el) observer.observe(el) })
-    return () => observer.disconnect()
+
+    refs.current.forEach(el => observerRef.current.observe(el))
+
+    return () => {
+      observerRef.current?.disconnect()
+      observerRef.current = null
+    }
   }, [])
-  return (el) => { if (el && !refs.current.includes(el)) refs.current.push(el) }
+
+  return useCallback((el) => {
+    if (!el || refs.current.includes(el)) return
+
+    refs.current.push(el)
+    if (observerRef.current) {
+      observerRef.current.observe(el)
+    } else if (!('IntersectionObserver' in window)) {
+      el.classList.add('visible')
+    }
+  }, [])
 }
 
 const BackIcon = () => (
@@ -45,7 +72,7 @@ export default function Contacts() {
   const loadContacts = async () => {
     try {
       const data = await apiFetch('/api/contacts')
-      setContacts(data.contacts || [])
+      setContacts(Array.isArray(data) ? data : data.contacts || [])
     } catch (err) {
       console.error('Load contacts error:', err)
     } finally {
@@ -56,14 +83,17 @@ export default function Contacts() {
   const handleAdd = async (e) => {
     e.preventDefault()
     try {
-      await apiFetch('/api/contacts', {
+      const data = await apiFetch('/api/contacts', {
         method: 'POST',
         body: JSON.stringify({ name, phone, relationship: relationship || null }),
       })
+      if (data.contact) {
+        setContacts(prev => [data.contact, ...prev.filter(contact => contact.id !== data.contact.id)])
+      }
       showToast('Contact added!', 'success')
       setName(''); setPhone(''); setRelationship('')
       setShowForm(false)
-      loadContacts()
+      await loadContacts()
     } catch (err) {
       showToast(err.message, 'error')
     }
@@ -73,8 +103,9 @@ export default function Contacts() {
     if (!window.confirm('Remove this emergency contact?')) return
     try {
       await apiFetch(`/api/contacts/${id}`, { method: 'DELETE' })
+      setContacts(prev => prev.filter(contact => contact.id !== id))
       showToast('Contact removed', 'warning')
-      loadContacts()
+      await loadContacts()
     } catch (err) {
       showToast(err.message, 'error')
     }

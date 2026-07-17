@@ -92,9 +92,6 @@ def init_db():
     print("✅ Database tables created successfully!")
 
 
-# ============================================
-# User Operations
-# ============================================
 
 def create_user(name: str, email: str, password_hash: str, phone: str = None):
     conn = get_connection()
@@ -153,9 +150,6 @@ def update_user(user_id: int, name: str = None, phone: str = None, safe_word: st
     return dict(user) if user else None
 
 
-# ============================================
-# Emergency Contact Operations
-# ============================================
 
 def add_contact(user_id: int, name: str, phone: str, relationship: str = None):
     conn = get_connection()
