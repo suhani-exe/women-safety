@@ -37,7 +37,7 @@
 
 ## 🎯 Problem Statement
 
-**Track 5: Women Empowerment & Social Inclusion** — *Financial inclusion, safety, education, skill development*
+**Track 6: Open Innovation** — *Financial inclusion, safety, education, skill development*
 
 Women's safety remains one of the most pressing social challenges. According to the National Crime Records Bureau (NCRB), India reported over **4 lakh cases** of crimes against women in a single year. Many of these incidents could have been mitigated or prevented with timely intervention.
 
